@@ -1,0 +1,917 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Countdown Studio</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #120a08;
+    --surface: #1a0f0c;
+    --surface2: #231510;
+    --surface3: #2d1a15;
+    --border: #3d2018;
+    --border2: #522a1f;
+    --accent: #d95f3b;
+    --accent-light: #e8805e;
+    --accent-pale: #f0a882;
+    --accent2: #c44a2a;
+    --warm: #e8c07a;
+    --text: #f5ede8;
+    --text-muted: #7a5a52;
+    --text-dim: #a87a6e;
+
+    /* Calendar day states — clearly distinct */
+    --cal-future-counted-bg:   rgba(217, 95, 59, 0.22);
+    --cal-future-counted-border: rgba(217, 95, 59, 0.45);
+    --cal-future-counted-text: #f0a882;
+
+    --cal-future-skip-bg:   #1c1210;
+    --cal-future-skip-text: #4a3028;
+
+    --cal-past-counted-bg:   #3a1f14;
+    --cal-past-counted-text: #7a5040;
+
+    --cal-past-skip-bg:   #161010;
+    --cal-past-skip-text: #2e1e18;
+
+    --cal-today-bg:   var(--accent);
+    --cal-today-text: #fff;
+
+    --cal-target-bg:   var(--warm);
+    --cal-target-text: #1a0a05;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+    font-size: 14px;
+  }
+
+  body::after {
+    content: '';
+    position: fixed; inset: 0;
+    background: radial-gradient(ellipse at 15% 50%, rgba(217,95,59,0.04) 0%, transparent 55%);
+    pointer-events: none; z-index: 0;
+  }
+
+  .app { display: flex; height: 100vh; position: relative; z-index: 1; }
+
+  /* ── SIDEBAR ── */
+  .sidebar {
+    width: 300px; min-width: 300px;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+
+  .sidebar-header { padding: 24px 18px 16px; border-bottom: 1px solid var(--border); }
+
+  .logo { font-size: 16px; font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 9px; }
+  .logo-icon {
+    width: 28px; height: 28px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    border-radius: 8px; display: flex; align-items: center; justify-content: center;
+    font-size: 14px; box-shadow: 0 3px 10px rgba(217,95,59,0.4);
+  }
+
+  .new-btn {
+    width: 100%; padding: 9px 14px; margin-top: 13px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    color: white; border: none; border-radius: 8px;
+    font-family: 'Plus Jakarta Sans', sans-serif; font-size: 13px; font-weight: 600;
+    cursor: pointer; transition: all 0.2s; box-shadow: 0 2px 10px rgba(217,95,59,0.3);
+  }
+  .new-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 18px rgba(217,95,59,0.45); }
+
+  .countdown-list { flex: 1; overflow-y: auto; padding: 10px; }
+  .countdown-list::-webkit-scrollbar { width: 3px; }
+  .countdown-list::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+  .empty-state { padding: 32px 16px; text-align: center; color: var(--text-muted); font-size: 13px; line-height: 2; }
+
+  .list-item {
+    padding: 11px 10px; border-radius: 10px; cursor: pointer;
+    transition: background 0.15s; margin-bottom: 2px;
+    border: 1px solid transparent; position: relative;
+  }
+  .list-item:hover { background: var(--surface2); }
+  .list-item.active { background: var(--surface2); border-color: var(--border2); }
+
+  .list-item-top { display: flex; align-items: flex-start; gap: 8px; }
+  .list-item-emoji { font-size: 20px; line-height: 1; flex-shrink: 0; }
+  .list-item-body { flex: 1; min-width: 0; }
+  .list-item-name { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .list-item-countdown { font-size: 12px; color: var(--accent-light); font-weight: 500; margin-top: 2px; }
+  .list-item-countdown.past { color: var(--text-muted); }
+  .list-item-meta { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+
+  .delete-btn {
+    position: absolute; top: 8px; right: 8px;
+    width: 20px; height: 20px; background: none; border: none;
+    color: var(--text-muted); cursor: pointer; font-size: 15px;
+    display: none; align-items: center; justify-content: center;
+    border-radius: 4px; transition: all 0.15s;
+  }
+  .list-item:hover .delete-btn { display: flex; }
+  .delete-btn:hover { background: rgba(217,95,59,0.2); color: var(--accent-light); }
+
+  /* ── MAIN ── */
+  .main { flex: 1; overflow-y: auto; padding: 40px 48px; }
+  .main::-webkit-scrollbar { width: 4px; }
+  .main::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .welcome-screen {
+    height: 100%; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    color: var(--text-muted); text-align: center;
+  }
+  .welcome-icon { font-size: 52px; margin-bottom: 18px; opacity: 0.2; }
+  .welcome-title { font-size: 26px; font-weight: 700; color: var(--text-dim); margin-bottom: 10px; letter-spacing: -0.5px; }
+  .welcome-sub { font-size: 13px; line-height: 1.9; }
+
+  /* ── DETAIL HEADER ── */
+  .detail-header { display: flex; align-items: flex-start; gap: 16px; margin-bottom: 28px; }
+  .detail-emoji { font-size: 42px; line-height: 1; }
+  .detail-title-wrap { flex: 1; }
+  .detail-name { font-size: 28px; font-weight: 700; letter-spacing: -0.8px; line-height: 1.1; }
+  .detail-date-label { font-size: 13px; color: var(--text-muted); margin-top: 5px; }
+
+  .edit-btn {
+    padding: 7px 13px; background: transparent;
+    border: 1px solid var(--border2); color: var(--text-dim);
+    border-radius: 7px; font-family: 'Plus Jakarta Sans', sans-serif;
+    font-size: 12px; font-weight: 500; cursor: pointer; transition: all 0.15s; white-space: nowrap;
+  }
+  .edit-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* ── COUNTER ── */
+  .counter-display {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 16px; padding: 32px 44px;
+    text-align: center; margin-bottom: 14px; position: relative; overflow: hidden;
+  }
+  .counter-display::before {
+    content: ''; position: absolute; inset: 0;
+    background: radial-gradient(ellipse at 50% -10%, rgba(217,95,59,0.08), transparent 60%);
+    pointer-events: none;
+  }
+
+  .counter-number {
+    font-size: 80px; font-weight: 700; line-height: 1; letter-spacing: -4px;
+    background: linear-gradient(140deg, var(--accent-pale) 0%, var(--accent) 50%, var(--accent2) 100%);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+  }
+  .counter-number.hours-mode { font-size: 64px; }
+
+  .counter-unit {
+    font-size: 11px; font-weight: 700; color: var(--text-muted);
+    letter-spacing: 2.5px; text-transform: uppercase; margin-top: 4px;
+  }
+
+  .counter-sublabel { font-size: 12px; color: var(--text-muted); margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
+
+  /* sub-24h live clock */
+  .live-clock {
+    font-size: 13px; font-weight: 600; color: var(--accent-light);
+    margin-top: 8px; letter-spacing: 0.5px;
+  }
+
+  /* next counted day banner */
+  .next-day-banner {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 10px; padding: 11px 16px;
+    font-size: 12px; color: var(--text-dim);
+    margin-bottom: 14px; display: flex; align-items: center; gap: 8px;
+  }
+  .next-day-banner strong { color: var(--accent-pale); font-weight: 600; }
+
+  /* ── STATS ── */
+  .stats-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 14px; }
+  .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 13px; text-align: center; }
+  .stat-val { font-size: 22px; font-weight: 700; letter-spacing: -0.8px; }
+  .stat-label { font-size: 10px; font-weight: 600; color: var(--text-muted); letter-spacing: 1.5px; text-transform: uppercase; margin-top: 3px; }
+
+  /* ── PROGRESS ── */
+  .progress-wrap { margin-bottom: 18px; }
+  .progress-label { display: flex; justify-content: space-between; font-size: 11px; font-weight: 500; color: var(--text-muted); margin-bottom: 7px; }
+  .progress-bar { height: 5px; background: var(--border); border-radius: 3px; overflow: hidden; }
+  .progress-fill { height: 100%; background: linear-gradient(90deg, var(--accent2), var(--accent-light)); border-radius: 3px; transition: width 0.8s cubic-bezier(0.4,0,0.2,1); }
+
+  /* ── CALENDAR ── */
+  .calendar-section { margin-top: 4px; }
+  .section-label { font-size: 10px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--text-muted); margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+
+  .calendar-grid-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 18px 18px 14px; }
+
+  .month-block { margin-bottom: 20px; }
+  .month-block:last-child { margin-bottom: 0; }
+  .month-title { font-size: 11px; font-weight: 700; color: var(--text-dim); margin-bottom: 8px; letter-spacing: 0.3px; }
+
+  .weekday-header { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; margin-bottom: 2px; }
+  .wd-label { text-align: center; font-size: 9px; font-weight: 700; color: var(--text-muted); letter-spacing: 0.3px; }
+
+  .days-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+
+  .day-cell {
+    aspect-ratio: 1; border-radius: 4px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px; font-weight: 500;
+    border: 1px solid transparent;
+  }
+
+  /* ── clear, distinct states ── */
+  .day-cell.dc-empty        { background: transparent; color: transparent; border-color: transparent; }
+
+  /* future days that COUNT: vivid tint + visible border */
+  .day-cell.dc-future       { background: var(--cal-future-counted-bg); color: var(--cal-future-counted-text); border-color: var(--cal-future-counted-border); }
+
+  /* future days that DON'T count: very dark, text barely visible */
+  .day-cell.dc-future-skip  { background: var(--cal-future-skip-bg); color: var(--cal-future-skip-text); border-color: transparent; }
+
+  /* past days that WERE counted: warm brown tint */
+  .day-cell.dc-past         { background: var(--cal-past-counted-bg); color: var(--cal-past-counted-text); border-color: transparent; }
+
+  /* past days that were NOT counted: almost invisible */
+  .day-cell.dc-past-skip    { background: var(--cal-past-skip-bg); color: var(--cal-past-skip-text); border-color: transparent; }
+
+  /* TODAY: full accent */
+  .day-cell.dc-today        { background: var(--cal-today-bg); color: var(--cal-today-text); border-color: transparent; font-weight: 700; box-shadow: 0 2px 8px rgba(217,95,59,0.5); }
+
+  /* TARGET day: gold */
+  .day-cell.dc-target       { background: var(--cal-target-bg); color: var(--cal-target-text); border-color: transparent; font-weight: 700; box-shadow: 0 2px 8px rgba(232,192,122,0.4); }
+
+  /* days before range start */
+  .day-cell.dc-before       { background: transparent; color: var(--surface3); border-color: transparent; }
+
+  .calendar-legend { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+  .legend-item { display: flex; align-items: center; gap: 5px; font-size: 10px; color: var(--text-muted); }
+  .legend-dot { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+
+  /* ── MODAL ── */
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(10,4,2,0.82);
+    backdrop-filter: blur(10px); z-index: 500;
+    display: none; align-items: center; justify-content: center; padding: 24px;
+  }
+  .modal-overlay.open { display: flex; }
+
+  .modal {
+    background: var(--surface); border: 1px solid var(--border2);
+    border-radius: 18px; padding: 30px; width: 100%; max-width: 500px;
+    max-height: 90vh; overflow-y: auto;
+  }
+  .modal::-webkit-scrollbar { width: 3px; }
+  .modal::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+  .modal-title { font-size: 21px; font-weight: 700; letter-spacing: -0.5px; margin-bottom: 24px; }
+  .form-group { margin-bottom: 17px; }
+  .form-label { display: block; font-size: 11px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-muted); margin-bottom: 7px; }
+
+  .form-input, .form-select {
+    width: 100%; padding: 10px 13px;
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 8px; color: var(--text);
+    font-family: 'Plus Jakarta Sans', sans-serif; font-size: 13px; font-weight: 500;
+    outline: none; transition: border-color 0.2s;
+  }
+  .form-input:focus, .form-select:focus { border-color: var(--accent); }
+  .form-select option { background: var(--surface2); }
+
+  /* date + time row */
+  .date-time-row { display: flex; gap: 8px; }
+  .date-time-row .form-input:first-child { flex: 2; }
+  .date-time-row .form-input:last-child  { flex: 1; }
+
+  .allday-toggle-row {
+    display: flex; align-items: center; gap: 8px;
+    margin-top: 8px; font-size: 12px; color: var(--text-dim); font-weight: 500; cursor: pointer;
+  }
+  .allday-toggle-row input[type=checkbox] { accent-color: var(--accent); width: 14px; height: 14px; cursor: pointer; }
+
+  .emoji-row { display: flex; gap: 6px; flex-wrap: wrap; }
+  .emoji-btn {
+    width: 36px; height: 36px; background: var(--bg);
+    border: 1px solid var(--border); border-radius: 8px;
+    font-size: 17px; cursor: pointer; transition: all 0.15s;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .emoji-btn:hover, .emoji-btn.selected { border-color: var(--accent); background: rgba(217,95,59,0.1); }
+
+  .count-mode-group { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+  .count-mode-opt {
+    padding: 9px 12px; background: var(--bg);
+    border: 1px solid var(--border); border-radius: 8px; cursor: pointer;
+    transition: all 0.15s; font-family: 'Plus Jakarta Sans', sans-serif;
+    font-size: 12px; font-weight: 500; color: var(--text-dim); text-align: center;
+  }
+  .count-mode-opt:hover { border-color: var(--border2); }
+  .count-mode-opt.selected { border-color: var(--accent); color: var(--accent); background: rgba(217,95,59,0.07); }
+
+  .weekday-picker { display: flex; gap: 5px; }
+  .wd-btn {
+    flex: 1; padding: 8px 3px; background: var(--bg);
+    border: 1px solid var(--border); border-radius: 6px; cursor: pointer;
+    font-family: 'Plus Jakarta Sans', sans-serif; font-size: 11px; font-weight: 600;
+    color: var(--text-muted); text-align: center; transition: all 0.15s;
+  }
+  .wd-btn.selected { border-color: var(--accent); color: var(--accent); background: rgba(217,95,59,0.07); }
+
+  .extra-dates-input {
+    width: 100%; padding: 10px 13px; background: var(--bg);
+    border: 1px solid var(--border); border-radius: 8px; color: var(--text);
+    font-family: 'Plus Jakarta Sans', sans-serif; font-size: 12px;
+    resize: vertical; min-height: 70px; outline: none; transition: border-color 0.2s;
+  }
+  .extra-dates-input:focus { border-color: var(--accent); }
+  .hint { font-size: 11px; color: var(--text-muted); margin-top: 5px; line-height: 1.6; }
+
+  .toggle-row { display: flex; align-items: center; justify-content: space-between; padding: 9px 0; }
+  .toggle-label { font-size: 13px; font-weight: 500; color: var(--text-dim); }
+  .toggle { width: 34px; height: 19px; background: var(--border2); border-radius: 10px; position: relative; cursor: pointer; transition: background 0.2s; flex-shrink: 0; }
+  .toggle.on { background: var(--accent); }
+  .toggle::after { content: ''; position: absolute; top: 2.5px; left: 2.5px; width: 14px; height: 14px; background: white; border-radius: 50%; transition: transform 0.2s; }
+  .toggle.on::after { transform: translateX(15px); }
+
+  .section-divider { font-size: 10px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--text-muted); border-bottom: 1px solid var(--border); padding-bottom: 8px; margin: 20px 0 13px; }
+
+  .form-actions { display: flex; gap: 9px; margin-top: 24px; }
+  .btn-primary {
+    flex: 1; padding: 11px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    color: white; border: none; border-radius: 8px;
+    font-family: 'Plus Jakarta Sans', sans-serif; font-size: 13px; font-weight: 600;
+    cursor: pointer; transition: all 0.2s; box-shadow: 0 2px 10px rgba(217,95,59,0.3);
+  }
+  .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(217,95,59,0.4); }
+  .btn-secondary {
+    padding: 11px 17px; background: transparent; color: var(--text-muted);
+    border: 1px solid var(--border2); border-radius: 8px;
+    font-family: 'Plus Jakarta Sans', sans-serif; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.2s;
+  }
+  .btn-secondary:hover { border-color: var(--text-dim); color: var(--text-dim); }
+
+  .cond-section { display: none; }
+  .cond-section.visible { display: block; }
+
+  @media (max-width: 700px) {
+    .app { flex-direction: column; }
+    .sidebar { width: 100%; min-width: unset; max-height: 210px; }
+    .main { padding: 20px 16px; }
+    .counter-number { font-size: 60px; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="sidebar">
+    <div class="sidebar-header">
+      <div class="logo">
+        <div class="logo-icon">⏳</div>
+        Countdown Studio
+      </div>
+      <button class="new-btn" onclick="openModal()">+ Neuer Countdown</button>
+    </div>
+    <div class="countdown-list" id="countdownList">
+      <div class="empty-state">Noch keine Countdowns.<br>Erstelle deinen ersten!</div>
+    </div>
+  </div>
+
+  <div class="main" id="mainContent">
+    <div class="welcome-screen">
+      <div class="welcome-icon">⏳</div>
+      <div class="welcome-title">Wähle einen Countdown</div>
+      <div class="welcome-sub">oder erstelle einen neuen<br>mit dem Button links.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ── MODAL ── -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <div class="modal-title" id="modalTitle">Neuer Countdown</div>
+
+    <div class="form-group">
+      <label class="form-label">Emoji</label>
+      <div class="emoji-row">
+        <button class="emoji-btn selected" data-emoji="🎉" onclick="selectEmoji(this)">🎉</button>
+        <button class="emoji-btn" data-emoji="🎂" onclick="selectEmoji(this)">🎂</button>
+        <button class="emoji-btn" data-emoji="✈️" onclick="selectEmoji(this)">✈️</button>
+        <button class="emoji-btn" data-emoji="🎓" onclick="selectEmoji(this)">🎓</button>
+        <button class="emoji-btn" data-emoji="💍" onclick="selectEmoji(this)">💍</button>
+        <button class="emoji-btn" data-emoji="🏖️" onclick="selectEmoji(this)">🏖️</button>
+        <button class="emoji-btn" data-emoji="🎄" onclick="selectEmoji(this)">🎄</button>
+        <button class="emoji-btn" data-emoji="🏆" onclick="selectEmoji(this)">🏆</button>
+        <button class="emoji-btn" data-emoji="🎵" onclick="selectEmoji(this)">🎵</button>
+        <button class="emoji-btn" data-emoji="🚀" onclick="selectEmoji(this)">🚀</button>
+        <button class="emoji-btn" data-emoji="❤️" onclick="selectEmoji(this)">❤️</button>
+        <button class="emoji-btn" data-emoji="🌅" onclick="selectEmoji(this)">🌅</button>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Name</label>
+      <input type="text" class="form-input" id="formName" placeholder="z.B. Sommerurlaub" maxlength="60">
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Zieldatum & Uhrzeit</label>
+      <div class="date-time-row">
+        <input type="date" class="form-input" id="formDate">
+        <input type="time" class="form-input" id="formTime" value="00:00">
+      </div>
+      <label class="allday-toggle-row">
+        <input type="checkbox" id="formAllDay" checked onchange="toggleAllDay()">
+        Ganztägig (kein genaues Ende)
+      </label>
+    </div>
+
+    <div class="section-divider">Zählmodus</div>
+
+    <div class="form-group">
+      <label class="form-label">Welche Tage zählen?</label>
+      <div class="count-mode-group">
+        <div class="count-mode-opt selected" data-mode="all" onclick="selectMode(this)">📅 Alle Tage</div>
+        <div class="count-mode-opt" data-mode="workdays" onclick="selectMode(this)">💼 Werktage</div>
+        <div class="count-mode-opt" data-mode="weekends" onclick="selectMode(this)">🛋️ Wochenenden</div>
+        <div class="count-mode-opt" data-mode="custom" onclick="selectMode(this)">⚙️ Eigene Auswahl</div>
+      </div>
+    </div>
+
+    <div class="cond-section" id="customWeekdays">
+      <div class="form-group">
+        <label class="form-label">Wochentage</label>
+        <div class="weekday-picker">
+          <div class="wd-btn selected" data-wd="1" onclick="toggleWd(this)">Mo</div>
+          <div class="wd-btn selected" data-wd="2" onclick="toggleWd(this)">Di</div>
+          <div class="wd-btn selected" data-wd="3" onclick="toggleWd(this)">Mi</div>
+          <div class="wd-btn selected" data-wd="4" onclick="toggleWd(this)">Do</div>
+          <div class="wd-btn selected" data-wd="5" onclick="toggleWd(this)">Fr</div>
+          <div class="wd-btn" data-wd="6" onclick="toggleWd(this)">Sa</div>
+          <div class="wd-btn" data-wd="0" onclick="toggleWd(this)">So</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section-divider">Erweiterte Optionen</div>
+
+    <div class="toggle-row">
+      <span class="toggle-label">Bestimmte Tage ausschließen</span>
+      <div class="toggle" id="toggleExclude" onclick="toggleSection('toggleExclude','excludeSection')"></div>
+    </div>
+    <div class="cond-section" id="excludeSection">
+      <div class="form-group" style="margin-top:10px">
+        <label class="form-label">Ausschließen (Feiertage etc.)</label>
+        <textarea class="extra-dates-input" id="formExclude" placeholder="2025-12-25&#10;2025-12-26"></textarea>
+        <div class="hint">Ein Datum pro Zeile · Format: YYYY-MM-DD</div>
+      </div>
+    </div>
+
+    <div class="toggle-row">
+      <span class="toggle-label">Bestimmte Tage einschließen</span>
+      <div class="toggle" id="toggleInclude" onclick="toggleSection('toggleInclude','includeSection')"></div>
+    </div>
+    <div class="cond-section" id="includeSection">
+      <div class="form-group" style="margin-top:10px">
+        <label class="form-label">Immer einschließen</label>
+        <textarea class="extra-dates-input" id="formInclude" placeholder="2025-12-24&#10;2026-05-01"></textarea>
+        <div class="hint">Ein Datum pro Zeile · Format: YYYY-MM-DD</div>
+      </div>
+    </div>
+
+    <div class="toggle-row">
+      <span class="toggle-label">Eigenes Startdatum</span>
+      <div class="toggle" id="toggleStart" onclick="toggleSection('toggleStart','startSection')"></div>
+    </div>
+    <div class="cond-section" id="startSection">
+      <div class="form-group" style="margin-top:10px">
+        <label class="form-label">Startdatum (Standard: heute)</label>
+        <input type="date" class="form-input" id="formStart">
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn-secondary" onclick="closeModal()">Abbrechen</button>
+      <button class="btn-primary" onclick="saveCountdown()">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── STATE ──
+let countdowns = JSON.parse(localStorage.getItem('countdownStudio_v3') || '[]');
+let activeId = null;
+let editingId = null;
+let selectedEmoji = '🎉';
+let selectedMode = 'all';
+let selectedWdays = new Set([1,2,3,4,5]);
+let liveTimerHandle = null;
+
+function save() { localStorage.setItem('countdownStudio_v3', JSON.stringify(countdowns)); }
+
+// ── DATE HELPERS ──
+function ds(d) { // "YYYY-MM-DD"
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+
+function getTargetMs(cd) {
+  if (cd.allDay) {
+    const d = new Date(cd.date + 'T00:00:00');
+    return d.getTime();
+  }
+  return new Date(cd.date + 'T' + (cd.time || '00:00') + ':00').getTime();
+}
+
+function countDays(targetDate, mode, customWdays, excludeDates, includeDates, startDate) {
+  const today = new Date(startDate ? startDate + 'T00:00:00' : new Date().toDateString());
+  today.setHours(0,0,0,0);
+  const target = new Date(targetDate + 'T00:00:00');
+  target.setHours(0,0,0,0);
+  const excludeSet = new Set(excludeDates || []);
+  const includeSet = new Set(includeDates || []);
+  const wdays = customWdays || [1,2,3,4,5];
+  const isPast = target < today;
+  let count = 0;
+  let cursor = new Date(isPast ? target : today);
+  cursor.setDate(cursor.getDate() + 1);
+  const end = isPast ? today : target;
+  while (cursor <= end) {
+    const dateStr = ds(cursor), wd = cursor.getDay();
+    let counts = false;
+    if (includeSet.has(dateStr)) counts = true;
+    else if (excludeSet.has(dateStr)) counts = false;
+    else switch(mode) {
+      case 'all':      counts = true; break;
+      case 'workdays': counts = wd >= 1 && wd <= 5; break;
+      case 'weekends': counts = wd === 0 || wd === 6; break;
+      case 'custom':   counts = wdays.includes(wd); break;
+    }
+    if (counts) count++;
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return { count, isPast };
+}
+
+function dayMatches(d, mode, wdays, excludeSet, includeSet) {
+  const dateStr = ds(d), wd = d.getDay();
+  if (includeSet.has(dateStr)) return true;
+  if (excludeSet.has(dateStr)) return false;
+  switch(mode) {
+    case 'all':      return true;
+    case 'workdays': return wd >= 1 && wd <= 5;
+    case 'weekends': return wd === 0 || wd === 6;
+    case 'custom':   return (wdays||[]).includes(wd);
+  }
+  return false;
+}
+
+// Next counted day after today
+function nextCountedDay(cd) {
+  if (cd.mode === 'all') return null; // no need to show
+  const excludeSet = new Set(cd.exclude || []);
+  const includeSet = new Set(cd.include || []);
+  const wdays = cd.wdays || [1,2,3,4,5];
+  const target = new Date(cd.date + 'T00:00:00');
+  let cursor = new Date(); cursor.setHours(0,0,0,0);
+  cursor.setDate(cursor.getDate() + 1);
+  for (let i = 0; i < 365; i++) {
+    if (cursor > target) return null;
+    if (dayMatches(cursor, cd.mode, wdays, excludeSet, includeSet)) return new Date(cursor);
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return null;
+}
+
+function formatDate(ds) {
+  if (!ds) return '';
+  return new Date(ds + 'T00:00:00').toLocaleDateString('de-DE', { day:'2-digit', month:'long', year:'numeric' });
+}
+
+function formatModeLabel(mode, wdays) {
+  if (mode === 'all') return 'Alle Tage';
+  if (mode === 'workdays') return 'Werktage';
+  if (mode === 'weekends') return 'Wochenenden';
+  if (mode === 'custom' && wdays) {
+    const n = ['So','Mo','Di','Mi','Do','Fr','Sa'];
+    return wdays.map(w => n[w]).join(', ');
+  }
+  return 'Benutzerdefiniert';
+}
+
+function pad2(n) { return String(n).padStart(2,'0'); }
+
+function msToHMS(ms) {
+  const totalSec = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  return { h, m, s };
+}
+
+// ── CALENDAR ──
+function buildCalendar(cd) {
+  const today = new Date(); today.setHours(0,0,0,0);
+  const startDate = cd.start ? new Date(cd.start + 'T00:00:00') : new Date(today);
+  const targetDate = new Date(cd.date + 'T00:00:00');
+  const excludeSet = new Set(cd.exclude || []);
+  const includeSet = new Set(cd.include || []);
+  const wdays = cd.wdays || [1,2,3,4,5];
+  const todayStr = ds(today);
+  const targetStr = cd.date;
+
+  function cellClass(d) {
+    const dateStr = ds(d);
+    if (dateStr === todayStr) return 'dc-today';
+    if (dateStr === targetStr) return 'dc-target';
+    if (d < startDate) return 'dc-before';
+    if (d > targetDate) return 'dc-empty';
+    const counted = dayMatches(d, cd.mode, wdays, excludeSet, includeSet);
+    const inPast = d < today;
+    if (inPast) return counted ? 'dc-past' : 'dc-past-skip';
+    return counted ? 'dc-future' : 'dc-future-skip';
+  }
+
+  const rangeStart = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
+  const rangeEnd   = new Date(targetDate.getFullYear(), targetDate.getMonth(), 1);
+  const months = [];
+  let cur = new Date(rangeStart);
+  while (cur <= rangeEnd && months.length < 6) { months.push(new Date(cur)); cur.setMonth(cur.getMonth()+1); }
+
+  const mNames = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
+  const wdLabels = ['Mo','Di','Mi','Do','Fr','Sa','So'];
+
+  let html = `<div class="section-label">Kalender-Timeline</div><div class="calendar-grid-wrap">`;
+
+  for (const ms2 of months) {
+    const y = ms2.getFullYear(), m = ms2.getMonth();
+    const dim = new Date(y, m+1, 0).getDate();
+    let fdow = new Date(y, m, 1).getDay();
+    fdow = fdow === 0 ? 6 : fdow - 1;
+
+    html += `<div class="month-block">
+      <div class="month-title">${mNames[m]} ${y}</div>
+      <div class="weekday-header">${wdLabels.map(l=>`<div class="wd-label">${l}</div>`).join('')}</div>
+      <div class="days-grid">`;
+    for (let i = 0; i < fdow; i++) html += `<div class="day-cell dc-empty"></div>`;
+    for (let day = 1; day <= dim; day++) {
+      const d = new Date(y, m, day);
+      html += `<div class="day-cell ${cellClass(d)}">${day}</div>`;
+    }
+    html += `</div></div>`;
+  }
+
+  html += `<div class="calendar-legend">
+    <div class="legend-item"><div class="legend-dot" style="background:var(--accent)"></div>Heute</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--warm)"></div>Ziel</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--cal-future-counted-bg);border:1px solid var(--cal-future-counted-border)"></div>Zählt noch</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--cal-future-skip-bg);border:1px solid #2a1510"></div>Zählt nicht</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--cal-past-counted-bg)"></div>Vergangen (gezählt)</div>
+  </div></div>`;
+  return html;
+}
+
+// ── RENDER LIST ──
+function renderList() {
+  const list = document.getElementById('countdownList');
+  if (!countdowns.length) { list.innerHTML = '<div class="empty-state">Noch keine Countdowns.<br>Erstelle deinen ersten!</div>'; return; }
+  list.innerHTML = countdowns.map(cd => {
+    const { count, isPast } = countDays(cd.date, cd.mode, cd.wdays, cd.exclude, cd.include, cd.start);
+    const remainMs = getTargetMs(cd) - Date.now();
+    let label;
+    if (!isPast && remainMs > 0 && remainMs < 86400000) {
+      const { h, m } = msToHMS(remainMs);
+      label = `${h}h ${pad2(m)}min`;
+    } else {
+      label = isPast ? `vor ${count} Tagen` : `in ${count} Tagen`;
+    }
+    return `<div class="list-item ${cd.id === activeId ? 'active' : ''}" onclick="selectCountdown('${cd.id}')">
+      <button class="delete-btn" onclick="deleteCountdown(event,'${cd.id}')">×</button>
+      <div class="list-item-top">
+        <div class="list-item-emoji">${cd.emoji}</div>
+        <div class="list-item-body">
+          <div class="list-item-name">${cd.name}</div>
+          <div class="list-item-countdown ${isPast?'past':''}">${label}</div>
+          <div class="list-item-meta">${formatDate(cd.date)}${!cd.allDay ? ' · ' + (cd.time||'00:00') : ''}</div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── RENDER DETAIL ──
+function renderDetail(id) {
+  if (liveTimerHandle) { clearInterval(liveTimerHandle); liveTimerHandle = null; }
+  const cd = countdowns.find(c => c.id === id);
+  if (!cd) return;
+
+  const { count, isPast } = countDays(cd.date, cd.mode, cd.wdays, cd.exclude, cd.include, cd.start);
+  const totalAll = countDays(cd.date, 'all', null, null, null, cd.start);
+  const todayStr = ds(new Date());
+  const elapsed = isPast ? 0 : countDays(todayStr, cd.mode, cd.wdays, cd.exclude, cd.include, cd.start).count;
+  const total = elapsed + count;
+  const progressPct = total > 0 ? Math.min(100, Math.round(elapsed / total * 100)) : (isPast ? 100 : 0);
+  const modeLabel = formatModeLabel(cd.mode, cd.wdays);
+  const targetMs = getTargetMs(cd);
+  const remainMs = targetMs - Date.now();
+  const showHours = !isPast && remainMs > 0 && remainMs < 86400000;
+
+  // Next counted day banner
+  const nextDay = (!isPast && cd.mode !== 'all') ? nextCountedDay(cd) : null;
+  let nextDayHtml = '';
+  if (nextDay) {
+    const diffDays = Math.round((nextDay - new Date().setHours(0,0,0,0)) / 86400000);
+    const label = diffDays === 1 ? 'morgen' : `in ${diffDays} Tagen`;
+    nextDayHtml = `<div class="next-day-banner">
+      <span>⏭</span>
+      <span>Nächster gezählter Tag: <strong>${nextDay.toLocaleDateString('de-DE', {weekday:'long', day:'2-digit', month:'long'})} (${label})</strong></span>
+    </div>`;
+  }
+
+  const dateLabel = cd.allDay ? formatDate(cd.date) : `${formatDate(cd.date)} um ${cd.time || '00:00'} Uhr`;
+  const calendarHtml = buildCalendar(cd);
+
+  function counterInner() {
+    const remNow = targetMs - Date.now();
+    const isNowPast = remNow <= 0;
+    if (isNowPast) {
+      return `<div class="counter-number">${count}</div>
+              <div class="counter-unit">${count===1?'Tag':'Tage'} vergangen</div>`;
+    }
+    if (remNow < 86400000) {
+      const { h, m, s } = msToHMS(remNow);
+      return `<div class="counter-number hours-mode">${pad2(h)}:${pad2(m)}:${pad2(s)}</div>
+              <div class="counter-unit">Stunden bis zum Ziel</div>
+              <div class="live-clock">Weniger als 24h verbleibend ⚡</div>`;
+    }
+    return `<div class="counter-number">${count}</div>
+            <div class="counter-unit">${count===1?'Tag':'Tage'} verbleibend</div>`;
+  }
+
+  document.getElementById('mainContent').innerHTML = `
+    <div class="detail-header">
+      <div class="detail-emoji">${cd.emoji}</div>
+      <div class="detail-title-wrap">
+        <div class="detail-name">${cd.name}</div>
+        <div class="detail-date-label">${dateLabel}</div>
+      </div>
+      <button class="edit-btn" onclick="openModal('${cd.id}')">✎ Bearbeiten</button>
+    </div>
+
+    <div class="counter-display" id="counterDisplay">
+      ${counterInner()}
+      <div class="counter-sublabel">Modus: ${modeLabel}${cd.exclude?.length?` · ${cd.exclude.length} Ausschlüsse`:''}${cd.include?.length?` · ${cd.include.length} Einschlüsse`:''}</div>
+    </div>
+
+    ${nextDayHtml}
+
+    <div class="stats-row">
+      <div class="stat-card"><div class="stat-val">${totalAll.count}</div><div class="stat-label">Kalendertage</div></div>
+      <div class="stat-card"><div class="stat-val">${progressPct}%</div><div class="stat-label">Fortschritt</div></div>
+      <div class="stat-card"><div class="stat-val">${Math.ceil(count/7)}</div><div class="stat-label">Wochen</div></div>
+    </div>
+
+    ${!isPast ? `<div class="progress-wrap">
+      <div class="progress-label"><span>Start</span><span>${progressPct}% erreicht</span><span>Ziel</span></div>
+      <div class="progress-bar"><div class="progress-fill" style="width:${progressPct}%"></div></div>
+    </div>` : ''}
+
+    <div class="calendar-section">${calendarHtml}</div>`;
+
+  // Live update for sub-24h or ticking clock
+  if (!isPast && targetMs - Date.now() < 86400000) {
+    liveTimerHandle = setInterval(() => {
+      const display = document.getElementById('counterDisplay');
+      if (!display) { clearInterval(liveTimerHandle); return; }
+      const inner = document.createElement('div');
+      inner.innerHTML = counterInner();
+      // Replace first children (number + unit + live) but keep sublabel
+      const sublabel = display.querySelector('.counter-sublabel');
+      display.innerHTML = counterInner();
+      if (sublabel) display.appendChild(sublabel);
+    }, 1000);
+  }
+}
+
+function selectCountdown(id) { activeId = id; renderList(); renderDetail(id); }
+
+function deleteCountdown(e, id) {
+  e.stopPropagation();
+  if (liveTimerHandle) { clearInterval(liveTimerHandle); liveTimerHandle = null; }
+  countdowns = countdowns.filter(c => c.id !== id);
+  save();
+  if (activeId === id) {
+    activeId = null;
+    document.getElementById('mainContent').innerHTML = `<div class="welcome-screen"><div class="welcome-icon">⏳</div><div class="welcome-title">Wähle einen Countdown</div><div class="welcome-sub">oder erstelle einen neuen<br>mit dem Button links.</div></div>`;
+  }
+  renderList();
+}
+
+// ── MODAL ──
+function toggleAllDay() {
+  const allDay = document.getElementById('formAllDay').checked;
+  document.getElementById('formTime').style.display = allDay ? 'none' : 'block';
+}
+
+function openModal(editId) {
+  editingId = editId || null;
+  document.getElementById('modalTitle').textContent = editId ? 'Countdown bearbeiten' : 'Neuer Countdown';
+
+  if (editId) {
+    const cd = countdowns.find(c => c.id === editId);
+    if (cd) {
+      document.getElementById('formName').value = cd.name;
+      document.getElementById('formDate').value = cd.date;
+      document.getElementById('formTime').value = cd.time || '00:00';
+      document.getElementById('formAllDay').checked = cd.allDay !== false;
+      document.getElementById('formExclude').value = (cd.exclude||[]).join('\n');
+      document.getElementById('formInclude').value = (cd.include||[]).join('\n');
+      document.getElementById('formStart').value = cd.start || '';
+      selectedEmoji = cd.emoji; selectedMode = cd.mode; selectedWdays = new Set(cd.wdays||[1,2,3,4,5]);
+      if (cd.exclude?.length) { document.getElementById('toggleExclude').classList.add('on'); document.getElementById('excludeSection').classList.add('visible'); }
+      if (cd.include?.length) { document.getElementById('toggleInclude').classList.add('on'); document.getElementById('includeSection').classList.add('visible'); }
+      if (cd.start) { document.getElementById('toggleStart').classList.add('on'); document.getElementById('startSection').classList.add('visible'); }
+    }
+  } else {
+    document.getElementById('formName').value = '';
+    document.getElementById('formDate').value = '';
+    document.getElementById('formTime').value = '00:00';
+    document.getElementById('formAllDay').checked = true;
+    document.getElementById('formExclude').value = '';
+    document.getElementById('formInclude').value = '';
+    document.getElementById('formStart').value = '';
+    selectedEmoji = '🎉'; selectedMode = 'all'; selectedWdays = new Set([1,2,3,4,5]);
+    ['toggleExclude','toggleInclude','toggleStart'].forEach(id => document.getElementById(id).classList.remove('on'));
+    ['excludeSection','includeSection','startSection'].forEach(id => document.getElementById(id).classList.remove('visible'));
+  }
+
+  toggleAllDay();
+  document.querySelectorAll('.emoji-btn').forEach(b => b.classList.toggle('selected', b.dataset.emoji === selectedEmoji));
+  document.querySelectorAll('.count-mode-opt').forEach(b => b.classList.toggle('selected', b.dataset.mode === selectedMode));
+  document.querySelectorAll('.wd-btn').forEach(b => b.classList.toggle('selected', selectedWdays.has(parseInt(b.dataset.wd))));
+  document.getElementById('customWeekdays').classList.toggle('visible', selectedMode === 'custom');
+  document.getElementById('modalOverlay').classList.add('open');
+}
+
+function closeModal() { document.getElementById('modalOverlay').classList.remove('open'); editingId = null; }
+
+function selectEmoji(btn) { document.querySelectorAll('.emoji-btn').forEach(b => b.classList.remove('selected')); btn.classList.add('selected'); selectedEmoji = btn.dataset.emoji; }
+
+function selectMode(btn) {
+  document.querySelectorAll('.count-mode-opt').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected'); selectedMode = btn.dataset.mode;
+  document.getElementById('customWeekdays').classList.toggle('visible', selectedMode === 'custom');
+}
+
+function toggleWd(btn) {
+  const wd = parseInt(btn.dataset.wd);
+  if (selectedWdays.has(wd)) selectedWdays.delete(wd); else selectedWdays.add(wd);
+  btn.classList.toggle('selected', selectedWdays.has(wd));
+}
+
+function toggleSection(toggleId, sectionId) {
+  const t = document.getElementById(toggleId); t.classList.toggle('on');
+  document.getElementById(sectionId).classList.toggle('visible', t.classList.contains('on'));
+}
+
+function saveCountdown() {
+  const name = document.getElementById('formName').value.trim();
+  const date = document.getElementById('formDate').value;
+  if (!name) { document.getElementById('formName').focus(); return; }
+  if (!date) { document.getElementById('formDate').focus(); return; }
+  const allDay = document.getElementById('formAllDay').checked;
+  const time = document.getElementById('formTime').value;
+  const parseDates = raw => raw.split('\n').map(s => s.trim()).filter(s => /^\d{4}-\d{2}-\d{2}$/.test(s));
+
+  const cd = {
+    id: editingId || (Date.now().toString(36) + Math.random().toString(36).slice(2)),
+    name, emoji: selectedEmoji, date,
+    allDay, time: allDay ? null : time,
+    mode: selectedMode, wdays: [...selectedWdays].sort(),
+    exclude: document.getElementById('toggleExclude').classList.contains('on') ? parseDates(document.getElementById('formExclude').value) : [],
+    include: document.getElementById('toggleInclude').classList.contains('on') ? parseDates(document.getElementById('formInclude').value) : [],
+    start: document.getElementById('toggleStart').classList.contains('on') && document.getElementById('formStart').value ? document.getElementById('formStart').value : null,
+    created: editingId ? (countdowns.find(c => c.id === editingId)?.created || Date.now()) : Date.now()
+  };
+
+  if (editingId) { const idx = countdowns.findIndex(c => c.id === editingId); if (idx >= 0) countdowns[idx] = cd; }
+  else countdowns.unshift(cd);
+  save(); closeModal(); renderList(); selectCountdown(cd.id);
+}
+
+document.getElementById('modalOverlay').addEventListener('click', function(e) { if (e.target === this) closeModal(); });
+
+// Minute refresh for list
+setInterval(() => { renderList(); }, 60000);
+
+// ── INIT ──
+renderList();
+if (countdowns.length) selectCountdown(countdowns[0].id);
+</script>
+</body>
+</html>
