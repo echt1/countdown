@@ -117,9 +117,10 @@ body::after{content:'';position:fixed;inset:0;background:radial-gradient(ellipse
 .sidebar-resize{position:absolute;right:0;top:0;bottom:0;width:5px;cursor:col-resize;z-index:10;background:transparent;transition:background .15s;}
 .sidebar-resize:hover,.sidebar-resize.dragging{background:var(--accent);}
 .sidebar-header{padding:18px 14px 12px;border-bottom:1px solid var(--border);}
-.logo{font-size:15px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:8px;}
-.logo-img{width:46px;height:26px;border-radius:7px;object-fit:cover;}
-/* .logo-icon{width:26px;height:26px;background:linear-gradient(135deg,var(--accent),var(--a2));border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:13px;box-shadow:0 3px 10px rgba(217,95,59,.4);flex-shrink:0;} */
+.logo{display:block;width:100%;cursor:default;}
+.logo-img{width:100%;height:auto;max-height:52px;object-fit:contain;object-position:left center;display:block;border-radius:0;}
+.logo-icon{width:26px;height:26px;background:linear-gradient(135deg,var(--accent),var(--a2));border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:13px;box-shadow:0 3px 10px rgba(217,95,59,.4);flex-shrink:0;}
+.logo-default{display:flex;align-items:center;gap:8px;font-size:15px;font-weight:700;color:var(--text);}
 .logo-text{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .sidebar-actions{display:flex;gap:5px;margin-top:10px;flex-wrap:wrap;}
 .new-btn{flex:1;min-width:60px;padding:7px 8px;background:linear-gradient(135deg,var(--accent),var(--a2));color:white;border:none;border-radius:7px;font-family:'Plus Jakarta Sans',sans-serif;font-size:11px;font-weight:700;cursor:pointer;transition:all .2s;box-shadow:0 2px 8px rgba(217,95,59,.3);}
@@ -412,11 +413,20 @@ body::after{content:'';position:fixed;inset:0;background:radial-gradient(ellipse
 .cat-pill-del{font-size:11px;line-height:1;opacity:.6;}
 .cat-pill-del:hover{opacity:1;}
 
+.sidebar-bottom-bar{
+  display:flex;align-items:stretch;border-top:1px solid var(--border);flex-shrink:0;
+}
+.gear-btn{
+  width:42px;flex-shrink:0;display:flex;align-items:center;justify-content:center;
+  background:transparent;border:none;border-right:1px solid var(--border);
+  color:var(--tm);cursor:pointer;transition:all .15s;
+}
+.gear-btn:hover{background:var(--surface2);color:var(--text);}
 .auth-btn{
-  display:flex;align-items:center;gap:8px;width:100%;padding:10px 10px;
-  background:transparent;border:none;border-bottom:1px solid var(--border);
+  flex:1;display:flex;align-items:center;gap:8px;padding:10px 10px;
+  background:transparent;border:none;
   color:var(--tm);font-family:'Plus Jakarta Sans',sans-serif;font-size:11px;font-weight:700;
-  cursor:pointer;transition:all .15s;letter-spacing:.3px;text-align:left;
+  cursor:pointer;transition:all .15s;text-align:left;min-width:0;
 }
 .auth-btn:hover{background:var(--surface2);color:var(--text);}
 .auth-avatar{width:20px;height:20px;border-radius:50%;object-fit:cover;flex-shrink:0;}
@@ -424,14 +434,6 @@ body::after{content:'';position:fixed;inset:0;background:radial-gradient(ellipse
 .sync-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;}
 .sync-dot.on{background:var(--green);}
 .sync-dot.off{background:var(--tm);}
-.settings-list-btn{
-  display:flex;align-items:center;gap:8px;width:100%;padding:10px 10px;
-  background:transparent;border:none;border-top:1px solid var(--border);
-  color:var(--tm);font-family:'Plus Jakarta Sans',sans-serif;font-size:11px;font-weight:700;
-  cursor:pointer;transition:all .15s;letter-spacing:.3px;
-}
-.settings-list-btn:hover{background:var(--surface2);color:var(--text);}
-.settings-list-btn svg{flex-shrink:0;}
 
 .qr-box{display:flex;justify-content:center;padding:16px 0 8px;}
 .qr-box canvas,.qr-box img{border-radius:8px;}
@@ -458,9 +460,11 @@ body::after{content:'';position:fixed;inset:0;background:radial-gradient(ellipse
   <div class="sidebar" id="sidebar">
     <div class="sidebar-resize" id="sidebarResize"></div>
     <div class="sidebar-header">
-      <div class="logo">
-        <div class="logo-icon" id="logoIcon"></div>
-        <span class="logo-text" id="logoText">C</span>
+      <div class="logo" id="logoWrap">
+        <div class="logo-default" id="logoDefault">
+          <div class="logo-icon">⏳</div>
+          <span class="logo-text" id="logoText">Countdown Studio</span>
+        </div>
       </div>
       <div class="sidebar-actions" id="sidebarActions">
         <button class="new-btn" id="newBtn" onclick="handleNewBtn()">+ Neu</button>
@@ -492,19 +496,19 @@ body::after{content:'';position:fixed;inset:0;background:radial-gradient(ellipse
     <div class="tab-content" id="tab-tracker">
       <div class="tracker-list" id="trackerList"><div class="empty-state">Noch keine Tracker.<br>Erstelle deinen ersten!</div></div>
     </div>
-  <!-- Auth button -->
-  <div id="authBtn">
-    <button class="auth-btn" onclick="window.fbSignIn()">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
-      <span>Mit Google anmelden</span>
-      <div class="sync-dot off"></div>
+  <!-- Bottom bar: gear + auth side by side -->
+  <div class="sidebar-bottom-bar">
+    <button class="gear-btn" onclick="openSettings()" title="Einstellungen">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="3"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
     </button>
+    <div id="authBtn" style="flex:1;display:flex;min-width:0;">
+      <button class="auth-btn" onclick="window.fbSignIn()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+        <span class="auth-name">Mit Google anmelden</span>
+        <div class="sync-dot off"></div>
+      </button>
+    </div>
   </div>
-  <!-- Settings always-visible at bottom of sidebar -->
-  <button class="settings-list-btn" onclick="openSettings()">
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="3"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
-    Einstellungen
-  </button>
 </div><!-- /sidebar -->
   <!-- ── MAIN ── -->
   <div class="main" id="mainContent">
@@ -650,6 +654,12 @@ body::after{content:'';position:fixed;inset:0;background:radial-gradient(ellipse
       <div class="settings-section-title">Sync-Status</div>
       <div id="settSyncStatus" style="font-size:12px;color:var(--tm);line-height:1.8">Nicht angemeldet — Daten nur lokal.</div>
     </div>
+    <div class="settings-section" style="margin-top:14px" id="settSignOutSection" style="display:none">
+      <div class="settings-section-title">Account</div>
+      <div id="settAccountInfo" style="font-size:12px;color:var(--tm);margin-bottom:10px;line-height:1.7"></div>
+      <button id="signOutBtn1" class="btn-secondary" style="width:100%;font-size:12px" onclick="signOutStep1()">Abmelden…</button>
+      <button id="signOutBtn2" style="display:none;width:100%;padding:9px;background:#c0392b;color:white;border:none;border-radius:7px;font-family:'Plus Jakarta Sans',sans-serif;font-size:12px;font-weight:700;cursor:pointer;margin-top:6px" onclick="signOutConfirm()">Wirklich abmelden?</button>
+    </div>
     <div class="settings-section" style="margin-top:14px">
       <div class="settings-section-title">Über</div>
       <div style="font-size:12px;color:var(--tm);line-height:1.8">Version 0.6 · Gebaut mit ❤️<br>Weitere Features kommen bald.</div>
@@ -692,9 +702,9 @@ body::after{content:'';position:fixed;inset:0;background:radial-gradient(ellipse
 
 <script>
 // ═══════════════ DEVELOPER BRANDING ═══════════════
-// Change these two lines to customise the app.
-const APP_NAME   = '';   // ← your app name
-const APP_LOGO   = 'https://i.ibb.co/WvYGp2Pd/cdstudio.png';                   // ← URL to your logo PNG, or '' for default icon
+// Change these two lines to customise the app. Do not expose a settings UI for these.
+const APP_NAME   = 'Countdown Studio';   // ← your app name
+const APP_LOGO   = '';                   // ← URL to your logo PNG, or '' for default icon
 
 // ═══════════════ STATE ═══════════════
 let countdowns = JSON.parse(localStorage.getItem('cs4_cd') || '[]');
@@ -756,29 +766,51 @@ window._onFirestoreTrackers = function(docs) {
 // Update auth UI in sidebar
 window._updateAuthUI = function(user) {
   if(user && window.fbPushLocal) {
-    // Push any local-only data to Firestore on sign-in
     window.fbPushLocal(user.uid).catch(e=>console.warn('Push local failed:', e));
   }
   const el = document.getElementById('authBtn');
   if (!el) return;
   if (user) {
-    el.innerHTML = `<button class="auth-btn" onclick="handleSignOut()">
+    el.innerHTML = `<button class="auth-btn" style="cursor:default;">
       <img class="auth-avatar" src="${user.photoURL||''}" onerror="this.style.display='none'">
       <span class="auth-name">${user.displayName||user.email||'Angemeldet'}</span>
       <div class="sync-dot on" title="Sync aktiv"></div>
     </button>`;
+    // Update settings sign-out section
+    const sec = document.getElementById('settSignOutSection');
+    const info = document.getElementById('settAccountInfo');
+    if (sec) sec.style.display = 'block';
+    if (info) info.innerHTML = `Angemeldet als <strong style="color:var(--text)">${user.displayName||user.email}</strong>`;
   } else {
     el.innerHTML = `<button class="auth-btn" onclick="window.fbSignIn()">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
-      <span>Mit Google anmelden</span>
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+      <span class="auth-name">Mit Google anmelden</span>
       <div class="sync-dot off"></div>
     </button>`;
+    const sec = document.getElementById('settSignOutSection');
+    if (sec) sec.style.display = 'none';
   }
 };
 
-async function handleSignOut() {
-  if (!confirm('Abmelden? Deine Daten bleiben lokal gespeichert.')) return;
+// Double-confirm sign-out — no browser alert()
+let signOutTimer = null;
+function signOutStep1() {
+  const btn2 = document.getElementById('signOutBtn2');
+  if (!btn2) return;
+  btn2.style.display = 'block';
+  // Auto-hide after 4s if not clicked
+  clearTimeout(signOutTimer);
+  signOutTimer = setTimeout(() => {
+    btn2.style.display = 'none';
+  }, 4000);
+}
+async function signOutConfirm() {
+  clearTimeout(signOutTimer);
+  document.getElementById('signOutBtn2').style.display = 'none';
+  document.getElementById('signOutBtn1').textContent = 'Abmelden…';
   if (window.fbSignOut) await window.fbSignOut();
+  document.getElementById('signOutBtn1').textContent = 'Abmelden…';
+  document.getElementById('settingsModal').classList.remove('open');
 }
 
 // Firestore-aware save/delete wrappers
@@ -936,19 +968,38 @@ function doImportCode(){
 
 // ═══════════════ BRANDING (edit APP_NAME / APP_LOGO at top of script) ═══════════════
 function applyBranding(){
-  document.getElementById('logoText').textContent = APP_NAME;
   document.title = APP_NAME;
+  const wrap = document.getElementById('logoWrap');
+  if(!wrap) return;
   if(APP_LOGO){
-    const iconEl = document.getElementById('logoIcon');
-    iconEl.outerHTML = `<img class="logo-img" id="logoIcon" src="${APP_LOGO}" alt="Logo" onerror="this.outerHTML='<div class=\"logo-icon\" id=\"logoIcon\">⏳</div>'">`;
+    // Wide banner logo — replaces default icon+text
+    wrap.innerHTML = `<img class="logo-img" src="${APP_LOGO}" alt="${APP_NAME}"
+      onerror="document.getElementById('logoWrap').innerHTML=document.getElementById('logoWrap').dataset.fallback">`;
+    wrap.dataset.fallback = `<div class="logo-default"><div class="logo-icon">⏳</div><span class="logo-text">${APP_NAME}</span></div>`;
+  } else {
+    const txt = document.getElementById('logoText');
+    if(txt) txt.textContent = APP_NAME;
   }
 }
 function openSettings(){
   renderSettCats();
+  // Reset double-confirm button
+  const btn2 = document.getElementById('signOutBtn2');
+  if(btn2) btn2.style.display = 'none';
+  const btn1 = document.getElementById('signOutBtn1');
+  if(btn1) btn1.textContent = 'Abmelden…';
+  // Sync status
   const ss = document.getElementById('settSyncStatus');
   if(ss) ss.innerHTML = window.fbUser
     ? `<span style="color:var(--green)">✓ Angemeldet als ${window.fbUser.displayName||window.fbUser.email}</span><br>Echtzeit-Sync aktiv.`
     : 'Nicht angemeldet — Daten nur lokal.';
+  // Account section visibility
+  const sec = document.getElementById('settSignOutSection');
+  if(sec) sec.style.display = window.fbUser ? 'block' : 'none';
+  if(window.fbUser){
+    const info = document.getElementById('settAccountInfo');
+    if(info) info.innerHTML = `Angemeldet als <strong style="color:var(--text)">${window.fbUser.displayName||window.fbUser.email}</strong>`;
+  }
   document.getElementById('settingsModal').classList.add('open');
 }
 function saveSettings(){ document.getElementById('settingsModal').classList.remove('open'); }
