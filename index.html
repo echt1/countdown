@@ -492,7 +492,6 @@ body::after{content:'';position:fixed;inset:0;background:radial-gradient(ellipse
     <div class="tab-content" id="tab-tracker">
       <div class="tracker-list" id="trackerList"><div class="empty-state">Noch keine Tracker.<br>Erstelle deinen ersten!</div></div>
     </div>
-  </div>
   <!-- Auth button -->
   <div id="authBtn">
     <button class="auth-btn" onclick="window.fbSignIn()">
@@ -506,6 +505,7 @@ body::after{content:'';position:fixed;inset:0;background:radial-gradient(ellipse
     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="3"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
     Einstellungen
   </button>
+</div><!-- /sidebar -->
   <!-- ── MAIN ── -->
   <div class="main" id="mainContent">
     <div class="welcome-screen">
@@ -1463,8 +1463,12 @@ function saveCountdown(){
     gcalUid:editCdId?(countdowns.find(c=>c.id===editCdId)?.gcalUid||null):null,
     created:editCdId?(countdowns.find(c=>c.id===editCdId)?.created||Date.now()):Date.now()
   };
-  if(editCdId){const i=countdowns.findIndex(c=>c.id===editCdId);if(i>=0){countdowns[i]=cd; saveCdWithSync(cd);}
-  else { countdowns.unshift(cd); saveCdWithSync(cd); }
+  if(editCdId){
+    const i=countdowns.findIndex(c=>c.id===editCdId);
+    if(i>=0){ countdowns[i]=cd; saveCdWithSync(cd); }
+  } else {
+    countdowns.unshift(cd); saveCdWithSync(cd);
+  }
   closeModal(); renderList(); selectCountdown(cd.id);
 }
 
