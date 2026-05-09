@@ -118,8 +118,8 @@ body::after{content:'';position:fixed;inset:0;background:radial-gradient(ellipse
 .sidebar-resize:hover,.sidebar-resize.dragging{background:var(--accent);}
 .sidebar-header{padding:18px 14px 12px;border-bottom:1px solid var(--border);}
 .logo{font-size:15px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:8px;}
-.logo-img{width:26px;height:26px;border-radius:7px;object-fit:cover;}
-.logo-icon{width:26px;height:26px;background:linear-gradient(135deg,var(--accent),var(--a2));border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:13px;box-shadow:0 3px 10px rgba(217,95,59,.4);flex-shrink:0;}
+.logo-img{width:46px;height:26px;border-radius:7px;object-fit:cover;}
+/* .logo-icon{width:26px;height:26px;background:linear-gradient(135deg,var(--accent),var(--a2));border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:13px;box-shadow:0 3px 10px rgba(217,95,59,.4);flex-shrink:0;} */
 .logo-text{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .sidebar-actions{display:flex;gap:5px;margin-top:10px;flex-wrap:wrap;}
 .new-btn{flex:1;min-width:60px;padding:7px 8px;background:linear-gradient(135deg,var(--accent),var(--a2));color:white;border:none;border-radius:7px;font-family:'Plus Jakarta Sans',sans-serif;font-size:11px;font-weight:700;cursor:pointer;transition:all .2s;box-shadow:0 2px 8px rgba(217,95,59,.3);}
@@ -459,8 +459,8 @@ body::after{content:'';position:fixed;inset:0;background:radial-gradient(ellipse
     <div class="sidebar-resize" id="sidebarResize"></div>
     <div class="sidebar-header">
       <div class="logo">
-        <div class="logo-icon" id="logoIcon">⏳</div>
-        <span class="logo-text" id="logoText">Countdown Studio</span>
+        <div class="logo-icon" id="logoIcon"></div>
+        <span class="logo-text" id="logoText">C</span>
       </div>
       <div class="sidebar-actions" id="sidebarActions">
         <button class="new-btn" id="newBtn" onclick="handleNewBtn()">+ Neu</button>
@@ -693,7 +693,7 @@ body::after{content:'';position:fixed;inset:0;background:radial-gradient(ellipse
 <script>
 // ═══════════════ DEVELOPER BRANDING ═══════════════
 // Change these two lines to customise the app.
-const APP_NAME   = 'Countdown Studio';   // ← your app name
+const APP_NAME   = '';   // ← your app name
 const APP_LOGO   = 'https://i.ibb.co/WvYGp2Pd/cdstudio.png';                   // ← URL to your logo PNG, or '' for default icon
 
 // ═══════════════ STATE ═══════════════
