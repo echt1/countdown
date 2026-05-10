@@ -107,6 +107,36 @@ function stopSync() {
   --cps-bg:#161010;--cps-t:#2a1810;
   --sidebar-w:290px;
 }
+
+/* ── THEME OVERRIDES ── */
+/* Light mode */
+[data-theme="light"]{
+  --bg:#f5f0ed;--surface:#ffffff;--surface2:#f0ebe7;--surface3:#e8e0da;
+  --border:#ddd4cc;--border2:#ccc0b5;
+  --text:#1a0f0a;--tm:#8a7060;--td:#5a3a28;
+  --cf-bg:rgba(217,95,59,.12);--cf-b:rgba(217,95,59,.35);--cf-t:#a03010;
+  --cfs-bg:#ede8e4;--cfs-t:#b0a090;
+  --cp-bg:#f0e0d8;--cp-t:#b07060;
+  --cps-bg:#f5f0ee;--cps-t:#d0c0b5;
+}
+/* Accent: Amber */
+[data-accent="amber"]{
+  --accent:#c97d20;--al:#e09840;--ap:#f0b870;--a2:#a06010;--warm:#e8d07a;
+  --cf-bg:rgba(201,125,32,.2);--cf-b:rgba(201,125,32,.45);--cf-t:#f0b870;
+  --cp-bg:#3a2a10;--cp-t:#907040;
+}
+/* Accent: Green */
+[data-accent="green"]{
+  --accent:#3a9e6a;--al:#5abf8a;--ap:#80d4a8;--a2:#2a7a50;--warm:#a8e870;
+  --cf-bg:rgba(58,158,106,.2);--cf-b:rgba(58,158,106,.45);--cf-t:#80d4a8;
+  --cp-bg:#103a20;--cp-t:#408060;
+}
+/* Accent: Blue */
+[data-accent="blue"]{
+  --accent:#2e6fd4;--al:#5090e8;--ap:#80b0f0;--a2:#1a50a8;--warm:#70b8e8;
+  --cf-bg:rgba(46,111,212,.2);--cf-b:rgba(46,111,212,.45);--cf-t:#80b0f0;
+  --cp-bg:#0a1a3a;--cp-t:#4070b0;
+}
 *{margin:0;padding:0;box-sizing:border-box;}
 body{background:var(--bg);color:var(--text);font-family:'Plus Jakarta Sans',sans-serif;min-height:100vh;overflow-x:hidden;font-size:14px;user-select:none;}
 body::after{content:'';position:fixed;inset:0;background:radial-gradient(ellipse at 15% 50%,rgba(217,95,59,.04),transparent 55%);pointer-events:none;z-index:0;}
@@ -158,7 +188,7 @@ body::after{content:'';position:fixed;inset:0;background:radial-gradient(ellipse
 .list-item.is-gcal{border-left:2px solid rgba(109,191,154,.35);}
 .list-item.dragging{opacity:.4;background:var(--surface3);}
 .list-item.drag-over{border-color:var(--accent);background:rgba(217,95,59,.05);}
-.drag-handle{position:absolute;left:3px;top:50%;transform:translateY(-50%);color:var(--tm);font-size:11px;opacity:0;transition:opacity .15s;cursor:grab;padding:2px;}
+.drag-handle{position:absolute;left:3px;top:50%;transform:translateY(-50%);color:var(--tm);font-size:11px;opacity:0;transition:opacity .15s;cursor:grab;padding:4px 3px;touch-action:none;}
 .list-item:hover .drag-handle{opacity:.6;}
 .list-item-top{display:flex;align-items:flex-start;gap:6px;padding-left:10px;}
 .list-item-emoji{font-size:17px;line-height:1;flex-shrink:0;}
@@ -261,6 +291,8 @@ body::after{content:'';position:fixed;inset:0;background:radial-gradient(ellipse
 /* ── DISCORD-STYLE SIDEBAR SECTIONS ── */
 .sidebar-section{margin-bottom:2px;}
 .sidebar-section-header{display:flex;align-items:center;gap:5px;padding:6px 6px 4px 8px;cursor:pointer;border-radius:6px;transition:background .12s;position:relative;}
+.section-drag-handle{font-size:10px;color:var(--tm);opacity:0;transition:opacity .15s;cursor:grab;padding:0 3px;flex-shrink:0;}
+.sidebar-section-header:hover .section-drag-handle{opacity:.6;}
 .sidebar-section-header:hover{background:var(--surface2);}
 .sidebar-section-arrow{font-size:9px;color:var(--tm);transition:transform .15s;flex-shrink:0;}
 .sidebar-section-arrow.open{transform:rotate(90deg);}
@@ -435,6 +467,11 @@ body::after{content:'';position:fixed;inset:0;background:radial-gradient(ellipse
 .sync-dot.on{background:var(--green);}
 .sync-dot.off{background:var(--tm);}
 
+.theme-btn{flex:1;padding:7px 6px;background:var(--bg);border:1px solid var(--border);
+  border-radius:6px;color:var(--td);font-family:'Plus Jakarta Sans',sans-serif;
+  font-size:11px;font-weight:600;cursor:pointer;transition:all .15s;text-align:center;}
+.theme-btn:hover,.theme-btn.active{border-color:var(--accent);color:var(--accent);background:rgba(217,95,59,.07);}
+[data-theme="light"] .theme-btn:hover,[data-theme="light"] .theme-btn.active{background:rgba(217,95,59,.1);}
 .qr-box{display:flex;justify-content:center;padding:16px 0 8px;}
 .qr-box canvas,.qr-box img{border-radius:8px;}
 .share-tabs{display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:16px;}
@@ -445,6 +482,14 @@ body::after{content:'';position:fixed;inset:0;background:radial-gradient(ellipse
 .share-panel{display:none;}
 .share-panel.active{display:block;}
 
+
+/* Mobile touch drag */
+.list-item.touch-dragging{opacity:.4;transform:scale(.97);}
+.list-item.touch-drag-ghost{
+  position:fixed;pointer-events:none;z-index:9999;opacity:.9;
+  background:var(--surface2);border:1px solid var(--accent);border-radius:9px;
+  padding:9px 8px;width:240px;box-shadow:0 8px 24px rgba(0,0,0,.4);
+}
 @media(max-width:700px){
   .app{flex-direction:column;}
   .sidebar{width:100%!important;min-width:unset;max-height:200px;}
@@ -661,8 +706,23 @@ body::after{content:'';position:fixed;inset:0;background:radial-gradient(ellipse
       <button id="signOutBtn2" style="display:none;width:100%;padding:9px;background:#c0392b;color:white;border:none;border-radius:7px;font-family:'Plus Jakarta Sans',sans-serif;font-size:12px;font-weight:700;cursor:pointer;margin-top:6px" onclick="signOutConfirm()">Wirklich abmelden?</button>
     </div>
     <div class="settings-section" style="margin-top:14px">
+      <div class="settings-section-title">Erscheinungsbild</div>
+      <div style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--tm);margin-bottom:7px">Modus</div>
+      <div style="display:flex;gap:6px;margin-bottom:12px">
+        <button class="theme-btn" data-theme="" onclick="setTheme('')">🌑 Dark</button>
+        <button class="theme-btn" data-theme="light" onclick="setTheme('light')">☀️ Light</button>
+      </div>
+      <div style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--tm);margin-bottom:7px">Akzentfarbe</div>
+      <div style="display:flex;gap:6px">
+        <button class="theme-btn accent-btn" data-accent="" onclick="setAccent('')" style="border-color:var(--accent)">🔴 Rot</button>
+        <button class="theme-btn accent-btn" data-accent="amber" onclick="setAccent('amber')">🟡 Amber</button>
+        <button class="theme-btn accent-btn" data-accent="green" onclick="setAccent('green')">🟢 Grün</button>
+        <button class="theme-btn accent-btn" data-accent="blue" onclick="setAccent('blue')">🔵 Blau</button>
+      </div>
+    </div>
+    <div class="settings-section" style="margin-top:14px">
       <div class="settings-section-title">Über</div>
-      <div style="font-size:12px;color:var(--tm);line-height:1.8">Version 0.6 · Gebaut mit ❤️<br>Weitere Features kommen bald.</div>
+      <div style="font-size:12px;color:var(--tm);line-height:1.8">Version 0.7 · Gebaut mit ❤️<br>Weitere Features kommen bald.</div>
     </div>
     <div class="form-actions"><button class="btn-primary" onclick="document.getElementById('settingsModal').classList.remove('open')">Fertig</button></div>
   </div>
@@ -704,7 +764,7 @@ body::after{content:'';position:fixed;inset:0;background:radial-gradient(ellipse
 // ═══════════════ DEVELOPER BRANDING ═══════════════
 // Change these two lines to customise the app. Do not expose a settings UI for these.
 const APP_NAME   = 'Countdown Studio';   // ← your app name
-const APP_LOGO   = 'https://i.ibb.co/WvYGp2Pd/cdstudio.png';                   // ← URL to your logo PNG, or '' for default icon
+const APP_LOGO   = 'https://i.ibb.co/WvYGp2Pd/cdstudio.png'; // logo
 
 // ═══════════════ STATE ═══════════════
 let countdowns = JSON.parse(localStorage.getItem('cs4_cd') || '[]');
@@ -1007,6 +1067,30 @@ function doImportCode(){
   setTimeout(()=>{ document.getElementById('importModal').classList.remove('open'); selectCountdown(cd.id); },700);
 }
 
+// ═══════════════ THEME ═══════════════
+function setTheme(theme){
+  document.documentElement.dataset.theme = theme;
+  settings.theme = theme; saveSett();
+  updateThemeBtns();
+}
+function setAccent(accent){
+  document.documentElement.dataset.accent = accent;
+  settings.accent = accent; saveSett();
+  updateThemeBtns();
+}
+function updateThemeBtns(){
+  document.querySelectorAll('.theme-btn:not(.accent-btn)').forEach(b=>{
+    b.classList.toggle('active', b.dataset.theme===(settings.theme||''));
+  });
+  document.querySelectorAll('.accent-btn').forEach(b=>{
+    b.classList.toggle('active', b.dataset.accent===(settings.accent||''));
+  });
+}
+function applyTheme(){
+  document.documentElement.dataset.theme  = settings.theme  || '';
+  document.documentElement.dataset.accent = settings.accent || '';
+}
+
 // ═══════════════ BRANDING (edit APP_NAME / APP_LOGO at top of script) ═══════════════
 function applyBranding(){
   document.title = APP_NAME;
@@ -1024,6 +1108,7 @@ function applyBranding(){
 }
 function openSettings(){
   renderSettCats();
+  updateThemeBtns();
   // Reset double-confirm button
   const btn2 = document.getElementById('signOutBtn2');
   if(btn2) btn2.style.display = 'none';
@@ -1179,15 +1264,20 @@ function renderList(){
   catOrder.forEach(cat => {
     const items = byCat[cat]||[];
     const open = !collapsedSections.has(cat);
-    html += `<div class="sidebar-section" id="sec-${CSS.escape(cat)}">
+        html += `<div class="sidebar-section" id="sec-${CSS.escape(cat)}"
+      draggable="true"
+      ondragstart="onCatDragStart(event,'${cat.replace(/'/g,"\'")}')"
+      ondragover="onCatDragOver(event,'${cat.replace(/'/g,"\'")}',this)"
+      ondragleave="this.querySelector('.sidebar-section-header').classList.remove('drag-over-section')"
+      ondrop="onCatDrop(event,'${cat.replace(/'/g,"\'")}')">
       <div class="sidebar-section-header"
-        onclick="toggleSection2('${cat.replace(/'/g,"\'")}')"
-        ondragover="onDragOverSection(event,'${cat.replace(/'/g,"\'")}',this)"
-        ondragleave="this.classList.remove('drag-over-section')"
-        ondrop="onDropSection(event,'${cat.replace(/'/g,"\'")}',this)">
+        onclick="toggleSection2('${cat.replace(/'/g,"\'")}')">
+        <span class="section-drag-handle">⠿</span>
         <span class="sidebar-section-arrow ${open?'open':''}">▶</span>
         <span class="sidebar-section-name">${cat}</span>
         <span class="sidebar-section-count">${items.length}</span>
+        <span style="font-size:9px;color:var(--tm);flex-shrink:0;margin-left:auto;padding-left:4px" 
+          onclick="event.stopPropagation();renameCat('${cat.replace(/'/g,"\'")}')">✎</span>
       </div>
       <div class="sidebar-section-body ${open?'':'collapsed'}">
         ${items.map(cd=>cdItemHtml(cd)).join('')}
@@ -1195,10 +1285,9 @@ function renderList(){
     </div>`;
   });
 
-  // Uncategorised section
   if(uncategorised.length || catOrder.length === 0){
-    const label = catOrder.length > 0 ? 'Sonstige' : '';
-    if(label){
+    const label2 = catOrder.length > 0 ? 'Sonstige' : '';
+    if(label2){
       const open2 = !collapsedSections.has('__none__');
       html += `<div class="sidebar-section">
         <div class="sidebar-section-header"
@@ -1207,7 +1296,7 @@ function renderList(){
           ondragleave="this.classList.remove('drag-over-section')"
           ondrop="onDropSection(event,'__none__',this)">
           <span class="sidebar-section-arrow ${open2?'open':''}">▶</span>
-          <span class="sidebar-section-name">${label}</span>
+          <span class="sidebar-section-name">Sonstige</span>
           <span class="sidebar-section-count">${uncategorised.length}</span>
         </div>
         <div class="sidebar-section-body ${open2?'':'collapsed'}">
@@ -1271,6 +1360,49 @@ function cdItemHtml(cd){
 
 // ═══════════════ DRAG & DROP ═══════════════
 function initDrag(){}
+
+// ── Category (section) reorder ──
+let catDragSrc = null;
+function onCatDragStart(e, cat){
+  catDragSrc = cat;
+  e.stopPropagation();
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', 'cat:'+cat);
+}
+function onCatDragOver(e, cat, el){
+  // Only handle if dragging a category, not a countdown item
+  const data = e.dataTransfer.types.includes('text/plain');
+  if(!catDragSrc || catDragSrc === cat) return;
+  e.preventDefault(); e.stopPropagation();
+  el.querySelector('.sidebar-section-header').classList.add('drag-over-section');
+}
+function onCatDrop(e, targetCat){
+  e.preventDefault(); e.stopPropagation();
+  document.querySelectorAll('.sidebar-section-header').forEach(h=>h.classList.remove('drag-over-section'));
+  if(!catDragSrc || catDragSrc === targetCat) { catDragSrc=null; return; }
+  // Reorder in settings.cats
+  const cats = getAllCats();
+  const srcIdx = cats.indexOf(catDragSrc), tgtIdx = cats.indexOf(targetCat);
+  if(srcIdx<0||tgtIdx<0){ catDragSrc=null; return; }
+  // Rebuild settings.cats in new order
+  const [item] = cats.splice(srcIdx,1);
+  cats.splice(tgtIdx,0,item);
+  settings.cats = cats; saveSett();
+  catDragSrc = null;
+  renderList();
+}
+
+// ── Rename category inline ──
+function renameCat(oldName){
+  const newName = prompt(`Kategorie umbenennen: "${oldName}"`, oldName);
+  if(!newName || newName===oldName) return;
+  // Update settings
+  const idx = (settings.cats||[]).indexOf(oldName);
+  if(idx>=0) settings.cats[idx]=newName; saveSett();
+  // Update all countdowns
+  countdowns.forEach(cd=>{ if(cd.cat===oldName){ cd.cat=newName; saveCdWithSync(cd); } });
+  saveCd(); renderList();
+}
 function onDragStart(e,id){ dragSrcId=id; setTimeout(()=>{ const el=document.getElementById('li-'+id); if(el)el.classList.add('dragging'); },0); e.dataTransfer.effectAllowed='move'; }
 function onDragOver(e,id){ e.preventDefault(); e.dataTransfer.dropEffect='move'; if(id!==dragSrcId){const el=document.getElementById('li-'+id);if(el)el.classList.add('drag-over');} }
 function onDragLeave(e){ e.currentTarget.classList.remove('drag-over'); }
@@ -1715,10 +1847,97 @@ async function importSelected(){
   document.getElementById(id).addEventListener('click',function(e){if(e.target===this)this.classList.remove('open');});
 });
 
+// ═══════════════ MOBILE TOUCH DRAG ═══════════════
+(function(){
+  let touchSrcId=null, ghost=null, lastOver=null;
+
+  function getItemIdFromEl(el){
+    const item = el.closest('.list-item[data-id]');
+    return item ? item.dataset.id : null;
+  }
+
+  function createGhost(srcEl){
+    ghost = document.createElement('div');
+    ghost.className = 'list-item touch-drag-ghost';
+    ghost.innerHTML = srcEl.querySelector('.list-item-top').innerHTML;
+    document.body.appendChild(ghost);
+  }
+
+  function moveGhost(x,y){
+    if(!ghost) return;
+    ghost.style.left = (x-120)+'px';
+    ghost.style.top  = (y-20)+'px';
+  }
+
+  function getElAtPoint(x,y){
+    if(ghost) ghost.style.display='none';
+    const el = document.elementFromPoint(x,y);
+    if(ghost) ghost.style.display='';
+    return el;
+  }
+
+  document.addEventListener('touchstart', e=>{
+    const item = e.target.closest('.list-item[data-id]');
+    if(!item) return;
+    // Only trigger on the drag handle or after long press
+    if(!e.target.closest('.drag-handle')) return;
+    touchSrcId = item.dataset.id;
+    item.classList.add('touch-dragging');
+    createGhost(item);
+    moveGhost(e.touches[0].clientX, e.touches[0].clientY);
+    e.preventDefault();
+  }, {passive:false});
+
+  document.addEventListener('touchmove', e=>{
+    if(!touchSrcId) return;
+    e.preventDefault();
+    const t = e.touches[0];
+    moveGhost(t.clientX, t.clientY);
+    const el = getElAtPoint(t.clientX, t.clientY);
+    const overItem = el ? el.closest('.list-item[data-id]') : null;
+    const overSection = el ? el.closest('.sidebar-section') : null;
+    // Highlight drop targets
+    if(lastOver) lastOver.classList.remove('drag-over','drag-over-section');
+    if(overItem && overItem.dataset.id !== touchSrcId){
+      overItem.classList.add('drag-over'); lastOver=overItem;
+    } else if(overSection){
+      const hdr = overSection.querySelector('.sidebar-section-header');
+      if(hdr){ hdr.classList.add('drag-over-section'); lastOver=hdr; }
+    }
+  }, {passive:false});
+
+  document.addEventListener('touchend', e=>{
+    if(!touchSrcId) return;
+    const t = e.changedTouches[0];
+    const el = getElAtPoint(t.clientX, t.clientY);
+    // Cleanup ghost
+    if(ghost){ ghost.remove(); ghost=null; }
+    document.querySelectorAll('.touch-dragging').forEach(x=>x.classList.remove('touch-dragging'));
+    document.querySelectorAll('.drag-over,.drag-over-section').forEach(x=>{x.classList.remove('drag-over','drag-over-section');});
+    // Execute drop
+    const overItem = el ? el.closest('.list-item[data-id]') : null;
+    const overSection = el ? el.closest('.sidebar-section[draggable]') : null;
+    if(overItem && overItem.dataset.id !== touchSrcId){
+      const srcIdx = countdowns.findIndex(c=>c.id===touchSrcId);
+      const tgtIdx = countdowns.findIndex(c=>c.id===overItem.dataset.id);
+      if(srcIdx>=0&&tgtIdx>=0){
+        const [item]=countdowns.splice(srcIdx,1); countdowns.splice(tgtIdx,0,item);
+        saveCd(); renderList();
+      }
+    } else if(overSection){
+      const catName = overSection.id.replace('sec-','');
+      const cd = countdowns.find(c=>c.id===touchSrcId);
+      if(cd){ cd.cat = catName==='undefined'||catName==='' ? null : decodeURIComponent(catName); saveCdWithSync(cd); renderList(); }
+    }
+    touchSrcId=null; lastOver=null;
+  });
+})();
+
 // minute refresh
 setInterval(()=>{renderList();renderTrackerList();},60000);
 
 // ═══════════════ INIT ═══════════════
+applyTheme();
 applyBranding();
 renderList();
 renderTrackerList();
