@@ -704,7 +704,7 @@ body::after{content:'';position:fixed;inset:0;background:radial-gradient(ellipse
 // ═══════════════ DEVELOPER BRANDING ═══════════════
 // Change these two lines to customise the app. Do not expose a settings UI for these.
 const APP_NAME   = 'Countdown Studio';   // ← your app name
-const APP_LOGO   = 'https://i.ibb.co/WvYGp2Pd/cdstudio.png';                   // ← URL to your logo PNG, or '' for default icon
+const APP_LOGO   = '';                   // ← URL to your logo PNG, or '' for default icon
 
 // ═══════════════ STATE ═══════════════
 let countdowns = JSON.parse(localStorage.getItem('cs4_cd') || '[]');
@@ -743,22 +743,63 @@ function saveSett() { localStorage.setItem('cs4_settings', JSON.stringify(settin
 window._localCountdowns = () => countdowns;
 window._localTrackers   = () => trackers;
 
-// Called by Firestore listener when remote data changes
+// Called by Firestore listener when remote data changes.
+// We track whether the first snapshot has arrived to avoid the
+// "empty collection on new user" race condition.
+let _fbCdReady = false, _fbTrReady = false;
+
+// Once logged in, Firestore is the source of truth — local state follows it.
 window._onFirestoreCountdowns = function(docs) {
-  if (!docs.length && countdowns.length) return; // ignore empty on first load race
-  countdowns = docs;
+  _fbCdReady = true;
+  // Sort incoming docs by sortOrder if present, then by creation time
+  docs.sort((a,b) => {
+    if(a.sortOrder!=null && b.sortOrder!=null) return a.sortOrder - b.sortOrder;
+    if(a.sortOrder!=null) return -1;
+    if(b.sortOrder!=null) return 1;
+    return (b.created||0) - (a.created||0);
+  });
+  // Merge: keep Firestore order (which now reflects manual sort)
+  const remote = new Map(docs.map(d => [d.id, d]));
+  // Update existing local items and add new remote ones
+  const merged = [];
+  // First: existing local items in order, updated with remote data
+  countdowns.forEach(cd => {
+    if (remote.has(cd.id)) {
+      merged.push(remote.get(cd.id));
+      remote.delete(cd.id);
+    }
+    // If not in remote anymore it was deleted — skip it
+  });
+  // Then: any new items that only exist in remote
+  remote.forEach(cd => merged.push(cd));
+  countdowns = merged;
   localStorage.setItem('cs4_cd', JSON.stringify(countdowns));
+  // Sync any new categories from imported countdowns into settings
+  countdowns.forEach(cd => {
+    if (cd.cat && !(settings.cats||[]).includes(cd.cat)) {
+      if (!settings.cats) settings.cats = [];
+      settings.cats.push(cd.cat);
+    }
+  });
+  saveSett();
   renderList();
-  if (activeCountdownId && !countdowns.find(c=>c.id===activeCountdownId)) {
+  if (activeCountdownId && !countdowns.find(c => c.id === activeCountdownId)) {
     activeCountdownId = null; showCdWelcome();
   }
 };
+
 window._onFirestoreTrackers = function(docs) {
-  if (!docs.length && trackers.length) return;
-  trackers = docs;
+  _fbTrReady = true;
+  const remote = new Map(docs.map(d => [d.id, d]));
+  const merged = [];
+  trackers.forEach(tr => {
+    if (remote.has(tr.id)) { merged.push(remote.get(tr.id)); remote.delete(tr.id); }
+  });
+  remote.forEach(tr => merged.push(tr));
+  trackers = merged;
   localStorage.setItem('cs4_tr', JSON.stringify(trackers));
   renderTrackerList();
-  if (activeTrackerId && !trackers.find(t=>t.id===activeTrackerId)) {
+  if (activeTrackerId && !trackers.find(t => t.id === activeTrackerId)) {
     activeTrackerId = null; showTrWelcome();
   }
 };
@@ -808,8 +849,8 @@ async function signOutConfirm() {
   clearTimeout(signOutTimer);
   document.getElementById('signOutBtn2').style.display = 'none';
   document.getElementById('signOutBtn1').textContent = 'Abmelden…';
+  _fbCdReady = false; _fbTrReady = false;
   if (window.fbSignOut) await window.fbSignOut();
-  document.getElementById('signOutBtn1').textContent = 'Abmelden…';
   document.getElementById('settingsModal').classList.remove('open');
 }
 
@@ -1198,7 +1239,9 @@ function onDropSection(e, cat, el){
   if(!dragSrcId) return;
   const cd = countdowns.find(c=>c.id===dragSrcId); if(!cd) return;
   cd.cat = cat==='__none__' ? null : cat;
-  saveCd(); renderList();
+  saveCd();
+  saveCdWithSync(cd);
+  renderList();
 }
 
 function cdItemHtml(cd){
@@ -1208,7 +1251,8 @@ function cdItemHtml(cd){
   if(!isPast&&rem>0&&rem<86400000){const{h,m}=msToHMS(rem);label=`${h}h ${pad2(m)}min`;}
   else label=isPast?`vor ${count} Tagen`:`in ${count} Tagen`;
   const catPill=cd.cat?`<div class="list-item-cat" style="background:rgba(217,95,59,.12);color:var(--al)">${cd.cat}</div>`:'';
-  return `<div class="list-item ${cd.id===activeCountdownId?'active':''} ${cd.gcalUid?'is-gcal':''}" id="li-${cd.id}" draggable="true" data-id="${cd.id}"
+  const calBorder = cd.calColor ? `border-left:3px solid ${cd.calColor};` : (cd.gcalUid ? 'border-left:3px solid rgba(109,191,154,.5);' : '');
+  return `<div class="list-item ${cd.id===activeCountdownId?'active':''}" id="li-${cd.id}" draggable="true" data-id="${cd.id}" style="${calBorder}"
     ondragstart="onDragStart(event,'${cd.id}')" ondragover="onDragOver(event,'${cd.id}')" ondrop="onDrop(event,'${cd.id}')" ondragleave="onDragLeave(event)" ondragend="onDragEnd()"
     onclick="selectCountdown('${cd.id}')">
     <span class="drag-handle" title="Ziehen zum Sortieren">⠿</span>
@@ -1238,8 +1282,15 @@ function onDrop(e,targetId){
   if(srcIdx<0||tgtIdx<0)return;
   const [item]=countdowns.splice(srcIdx,1);
   countdowns.splice(tgtIdx,0,item);
+  // Assign sortOrder indices so Firestore sync preserves manual order
+  countdowns.forEach((cd,i) => cd.sortOrder = i);
   saveCd();
-  if(window.fbUser&&window.fbSaveCountdown) countdowns.forEach(cd=>window.fbSaveCountdown(window.fbUser.uid,cd));
+  // Only write the two moved items to Firestore, not all
+  if(window.fbUser&&window.fbSaveCountdown){
+    window.fbSaveCountdown(window.fbUser.uid, countdowns[tgtIdx]);
+    const otherIdx = tgtIdx <= srcIdx ? srcIdx+1 : srcIdx;
+    if(countdowns[otherIdx]) window.fbSaveCountdown(window.fbUser.uid, countdowns[otherIdx]);
+  }
   renderList();
 }
 function onDragEnd(){
@@ -1568,6 +1619,13 @@ async function fetchICS(){
   renderEvtList();
 }
 function parseICS(text){
+  // Extract calendar-level metadata
+  const calColorMatch = text.match(/X-APPLE-CALENDAR-COLOR:([^\r\n]+)/i)
+                     || text.match(/COLOR:([^\r\n]+)/i);
+  const calColor = calColorMatch ? calColorMatch[1].trim() : null;
+  const calNameMatch = text.match(/X-WR-CALNAME:([^\r\n]+)/i);
+  const calName = calNameMatch ? icsUnescape(calNameMatch[1].trim()) : null;
+
   const evts=[]; const blocks=text.split('BEGIN:VEVENT');
   for(let i=1;i<blocks.length;i++){
     const b=blocks[i];
@@ -1578,11 +1636,22 @@ function parseICS(text){
     if(/^\d{8}$/.test(dtstart)){date=`${dtstart.slice(0,4)}-${dtstart.slice(4,6)}-${dtstart.slice(6,8)}`;allDay=true;}
     else if(/^\d{8}T\d{6}/.test(dtstart)){date=`${dtstart.slice(0,4)}-${dtstart.slice(4,6)}-${dtstart.slice(6,8)}`;time=`${dtstart.slice(9,11)}:${dtstart.slice(11,13)}`;allDay=false;}
     else continue;
-    evts.push({uid,summary:icsUnescape(summary),date,time,allDay});
+    evts.push({uid,summary:icsUnescape(summary),date,time,allDay,calColor,calName});
   }
   return evts.sort((a,b)=>a.date.localeCompare(b.date));
 }
 function icsUnescape(s){return s.replace(/\\n/g,'\n').replace(/\\,/g,',').replace(/\\;/g,';').replace(/\\\\/g,'\\');}
+
+// Generate a consistent accent color from a string (for ICS feed coloring)
+function strToColor(str) {
+  const palette = [
+    '#d95f3b','#e8805e','#e8c07a','#6dbf9a','#7ab8e8',
+    '#b87ae8','#e87ab0','#a8c870','#e8d47a','#7ae8d4'
+  ];
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) hash = str.charCodeAt(i) + ((hash << 5) - hash);
+  return palette[Math.abs(hash) % palette.length];
+}
 function guessEmoji(n){const l=n.toLowerCase();if(/geburtstag|birthday/.test(l))return'🎂';if(/urlaub|vacation|reise|trip/.test(l))return'✈️';if(/hochzeit|wedding/.test(l))return'💍';if(/konzert|concert|musik/.test(l))return'🎵';if(/sport|training|gym/.test(l))return'🏆';if(/weihnacht|christmas/.test(l))return'🎄';if(/silvester|neujahr|new year/.test(l))return'🎉';if(/arzt|doktor|zahnarzt/.test(l))return'🏥';if(/deadline|abgabe/.test(l))return'🚨';if(/prüfung|exam|klausur/.test(l))return'🎓';return'📌';}
 function setEvtFilter(btn,f){document.querySelectorAll('.event-filter-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');evtFilter=f;renderEvtList();}
 function renderEvtList(){
@@ -1600,10 +1669,36 @@ async function importSelected(){
   const toImp=parsedEvts.filter(e=>selEvts.has(e.uid)); if(!toImp.length)return;
   const existing=new Set(countdowns.map(c=>c.gcalUid).filter(Boolean));
   let n=0;
-  for(const e of toImp){if(existing.has(e.uid))continue;countdowns.unshift({id:Date.now().toString(36)+Math.random().toString(36).slice(2),name:e.summary,emoji:guessEmoji(e.summary),date:e.date,allDay:e.allDay,time:e.allDay?null:e.time,mode:'all',wdays:[1,2,3,4,5],exclude:[],include:[],start:null,cat:null,gcalUid:e.uid,created:Date.now()});n++;await new Promise(r=>setTimeout(r,15));}
-  saveCd();renderList();
-  const st=document.getElementById('fetchStatus');st.textContent=`✓ ${n} importiert`;st.className='fetch-status ok';
-  setTimeout(()=>{document.getElementById('gcalOverlay').classList.remove('open');if(countdowns.length)selectCountdown(countdowns[0].id);},800);
+  // Collect unique calendar names to auto-create categories
+  const newCats = new Set();
+  for(const e of toImp){
+    if(existing.has(e.uid))continue;
+    // Use calName from ICS as category, fallback to feed name
+    const feedName = document.getElementById('icsFeedName').value.trim()||null;
+    const cat = e.calName || feedName || null;
+    if(cat && !(settings.cats||[]).includes(cat)){
+      if(!settings.cats) settings.cats=[];
+      settings.cats.push(cat);
+      newCats.add(cat);
+    }
+    const cd = {
+      id:Date.now().toString(36)+Math.random().toString(36).slice(2),
+      name:e.summary, emoji:guessEmoji(e.summary),
+      date:e.date, allDay:e.allDay, time:e.allDay?null:e.time,
+      mode:'all', wdays:[1,2,3,4,5], exclude:[], include:[], start:null,
+      cat, calColor:e.calColor||strToColor(cat||e.summary)||null, gcalUid:e.uid, created:Date.now()
+    };
+    countdowns.unshift(cd);
+    saveCdWithSync(cd);
+    n++;
+    await new Promise(r=>setTimeout(r,15));
+  }
+  if(newCats.size) saveSett();
+  saveCd(); renderList();
+  const st=document.getElementById('fetchStatus');
+  st.textContent=`✓ ${n} importiert${newCats.size?' · '+newCats.size+' neue Kategorie(n)':''}`;
+  st.className='fetch-status ok';
+  setTimeout(()=>{document.getElementById('gcalOverlay').classList.remove('open');if(countdowns.length)selectCountdown(countdowns[0].id);},1000);
 }
 
 // ═══════════════ SIDEBAR RESIZE ═══════════════
