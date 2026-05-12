@@ -1035,7 +1035,7 @@ function dpRender(containerId, hiddenId){
     </div>
     <div class="date-picker-footer">
       <div class="dp-chips">${chips||'<span style="font-size:10px;color:var(--tm)">Keine Tage ausgewählt</span>'}</div>
-      ${dpState.rangeStart?`<span class="dp-mode-hint">→ Bis-Datum klicken</span>`:'<span class="dp-mode-hint">Klick=einzeln · 2×=Bereich</span>'}
+      ${dpState.rangeStart?'<span class="dp-mode-hint">→ Bis-Datum wählen</span>':''}
     </div>`;
   // Sync hidden textarea
   const ta=document.getElementById(hiddenId); if(ta) ta.value=sortedDates.join('\n');
@@ -1237,41 +1237,8 @@ function renderMyRooms(){
     </div>`).join('');
 }
 
-function generateRoomCode(){
-  return Math.random().toString(36).slice(2,8).toUpperCase();
-}
 
-async function createRoom(){
-  if(!window.fbUser){ alert('Bitte zuerst anmelden.'); return; }
-  const name=document.getElementById('roomNameInput').value.trim();
-  if(!name){ document.getElementById('roomNameInput').focus(); return; }
-  const roomId=generateRoomCode();
-  const st=document.getElementById('roomStatus');
-  st.style.color='var(--tm)'; st.textContent='Erstelle Raum…';
-  try{
-    // Use Firebase from the module via window helpers
-    await window.fbCreateRoom(roomId,{name,owner:window.fbUser.uid,created:Date.now(),members:[window.fbUser.uid],countdowns:[]});
-    myRooms.push({id:roomId,name}); saveRooms();
-    st.style.color='var(--green)'; st.textContent=`✓ Raum erstellt! Code: ${roomId}`;
-    renderMyRooms();
-    setTimeout(()=>openRoom(roomId,name),600);
-  }catch(e){ st.style.color='#e07070'; st.textContent='Fehler: '+e.message; }
-}
 
-async function joinRoom(){
-  const code=document.getElementById('roomJoinCode').value.trim().toUpperCase();
-  if(code.length!==6){ document.getElementById('roomStatus').textContent='Code muss 6 Zeichen haben.'; return; }
-  const st=document.getElementById('roomStatus');
-  st.style.color='var(--tm)'; st.textContent='Suche Raum…';
-  try{
-    const room=await window.fbGetRoom(code);
-    if(!room){ st.style.color='#e07070'; st.textContent='Raum nicht gefunden.'; return; }
-    if(!myRooms.find(r=>r.id===code)){ myRooms.push({id:code,name:room.name}); saveRooms(); }
-    st.style.color='var(--green)'; st.textContent=`✓ Raum "${room.name}" gefunden!`;
-    renderMyRooms();
-    setTimeout(()=>openRoom(code,room.name),500);
-  }catch(e){ st.style.color='#e07070'; st.textContent='Fehler: '+e.message; }
-}
 
 function openRoom(roomId, roomName){
   activeRoomId=roomId;
@@ -2040,7 +2007,9 @@ function renderCdDetail(id){
     return `<div class="counter-number">${count}</div><div class="counter-unit">${count===1?'Tag':'Tage'} verbleibend</div>`;
   }
 
-  const roomBtn = currentRoom ? `<button class="edit-btn" onclick="addToRoom('${cd.id}')">👥 Raum</button>` : '';
+  const roomBtn = currentRoom ? '<button class="edit-btn" onclick="addToRoom(\''+cd.id+'\')">👥 Raum</button>' : '';
+  const excNote = cd.exclude?.length ? ' · '+cd.exclude.length+' Ausschlüsse' : '';
+  const incNote = cd.include?.length ? ' · '+cd.include.length+' Einschlüsse' : '';
   document.getElementById('mainContent').innerHTML=`
     <div class="detail-header">
       <div class="detail-emoji">${cd.emoji}</div>
@@ -2057,7 +2026,7 @@ function renderCdDetail(id){
     </div>
     <div class="counter-display" id="counterDisplay">
       ${counterInner()}
-      <div class="counter-sublabel">Modus: ${fmtMode(cd.mode,cd.wdays)}${cd.exclude?.length?` · ${cd.exclude.length} Ausschlüsse`:''}${cd.include?.length?` · ${cd.include.length} Einschlüsse`:''}</div>
+      <div class="counter-sublabel">Modus: ${fmtMode(cd.mode,cd.wdays)}${excNote}${incNote}</div>
     </div>
     ${nextHtml}
     <div class="stats-row">
@@ -2638,40 +2607,8 @@ function genRoomCode(){
   return Math.random().toString(36).slice(2,8).toUpperCase();
 }
 
-async function createRoom(){
-  if(!window.fbUser){ alert('Bitte zuerst mit Google anmelden.'); return; }
-  const name = document.getElementById('roomNameInput').value.trim();
-  if(!name) return;
-  const code = genRoomCode();
-  const room = { code, name, owner: window.fbUser.uid, created: Date.now() };
-  // Save room to Firestore
-  if(window.fbSetRoom) await window.fbSetRoom(code, room);
-  saveRoom(room);
-  subscribeRoom(code);
-  openRoomModal();
-}
 
-async function joinRoom(){
-  const code = document.getElementById('roomCodeInput').value.trim().toUpperCase();
-  const statusEl = document.getElementById('roomJoinStatus');
-  if(code.length !== 6){ statusEl.style.color='#e07070'; statusEl.textContent='Bitte 6-stelligen Code eingeben.'; return; }
-  if(!window.fbGetRoom){ statusEl.style.color='#e07070'; statusEl.textContent='Bitte zuerst anmelden.'; return; }
-  statusEl.style.color='var(--tm)'; statusEl.textContent='Suche Raum…';
-  const room = await window.fbGetRoom(code);
-  if(!room){ statusEl.style.color='#e07070'; statusEl.textContent='Raum nicht gefunden.'; return; }
-  saveRoom(room);
-  subscribeRoom(code);
-  statusEl.style.color='var(--green)'; statusEl.textContent='✓ Beigetreten!';
-  setTimeout(()=>{ document.getElementById('roomModal').classList.remove('open'); renderRoomTab(); }, 800);
-}
 
-function leaveRoom(){
-  if(unsubRoom){ unsubRoom(); unsubRoom=null; }
-  currentRoom=null; localStorage.removeItem('cs4_room');
-  roomCountdowns=[];
-  openRoomModal();
-  renderRoomTab();
-}
 
 function copyRoomCode(){
   if(!currentRoom) return;
@@ -2679,13 +2616,6 @@ function copyRoomCode(){
   else { const ta=document.createElement('textarea');ta.value=currentRoom.code;document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta); }
 }
 
-function subscribeRoom(code){
-  if(unsubRoom){ unsubRoom(); unsubRoom=null; }
-  if(window.fbSubscribeRoom) unsubRoom = window.fbSubscribeRoom(code, (cds)=>{
-    roomCountdowns = cds;
-    renderRoomTab();
-  });
-}
 
 window._onRoomCountdowns = function(cds){ roomCountdowns=cds; renderRoomTab(); };
 
