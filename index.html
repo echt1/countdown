@@ -639,6 +639,7 @@ canvas#shareCardCanvas{border-radius:12px;max-width:100%;}
     <div class="tab-content" id="tab-tracker">
       <div class="tracker-list" id="trackerList"><div class="empty-state">Noch keine Tracker.<br>Erstelle deinen ersten!</div></div>
     </div>
+    <!-- Rooms tab removed — room access via 👥 button in countdown detail -->
   <!-- Bottom bar: gear + auth side by side -->
   <div class="sidebar-bottom-bar">
     <button class="gear-btn" onclick="openSettings()" title="Einstellungen">
@@ -766,25 +767,15 @@ canvas#shareCardCanvas{border-radius:12px;max-width:100%;}
     </div>
     <!-- QR panel -->
     <div class="share-panel" id="sharePanelQR">
-      <div class="modal-sub" style="margin-top:0">QR-Code scannen → Code aus dem Bild abtippen oder Screenshot machen und in die App kopieren.</div>
+      <div class="modal-sub" style="margin-top:0">QR-Code scannen → Screenshot machen und Code in die App kopieren.</div>
       <div class="qr-box" id="qrBox"></div>
       <button class="copy-btn" id="qrDownloadBtn" onclick="downloadQR()">⬇ QR-Code speichern</button>
-    </div>
-    <!-- Embed panel -->
-    <div class="share-panel" id="sharePanelEmbed">
-      <div class="modal-sub" style="margin-top:0">Binde diesen Countdown als Widget in eine Website ein.</div>
-      <div class="share-code-box" id="embedCodeBox" onclick="selectEmbedCode()" style="font-size:10px;line-height:1.6"></div>
-      <button class="copy-btn" id="copyEmbedBtn" onclick="copyEmbedCode()">📋 Embed-Code kopieren</button>
     </div>
     <!-- Card panel -->
     <div class="share-panel" id="sharePanelCard">
       <div class="modal-sub" style="margin-top:0">Visuelle Share-Karte — als Bild speichern und teilen.</div>
-      <div class="share-card-wrap">
-        <canvas id="shareCardCanvas" width="600" height="340"></canvas>
-      </div>
-      <div class="share-card-dl">
-        <button class="copy-btn" onclick="downloadShareCard()">⬇ Als PNG speichern</button>
-      </div>
+      <div class="share-card-canvas-wrap"><canvas id="shareCardCanvas" width="600" height="340"></canvas></div>
+      <button class="copy-btn" onclick="downloadShareCard()">⬇ Als PNG speichern</button>
     </div>
     <!-- Embed panel -->
     <div class="share-panel" id="sharePanelEmbed">
@@ -797,26 +788,8 @@ canvas#shareCardCanvas{border-radius:12px;max-width:100%;}
           <button class="theme-btn" onclick="setEmbedSize('lg',this)" style="flex:1">Groß</button>
         </div>
       </div>
-      <div class="share-code-box" id="embedCodeBox" style="font-size:10px;line-height:1.5"></div>
+      <div class="share-code-box" id="embedCodeBox" onclick="selectEmbedCode()" style="font-size:10px;line-height:1.5"></div>
       <button class="copy-btn" id="embedCopyBtn" onclick="copyEmbedCode()">📋 Code kopieren</button>
-    </div>
-    <!-- Embed panel -->
-    <div class="share-panel" id="sharePanelEmbed">
-      <div class="modal-sub" style="margin-top:0">Bette diesen Countdown auf einer Website ein.</div>
-      <div class="share-code-box" id="embedCodeBox" style="font-size:10px" onclick="selectEmbedCode()"></div>
-      <button class="copy-btn" onclick="copyEmbedCode()">📋 Embed-Code kopieren</button>
-    </div>
-    <!-- Embed panel -->
-    <div class="share-panel" id="sharePanelEmbed">
-      <div class="modal-sub" style="margin-top:0">Binde diesen Countdown als Widget in eine Website ein.</div>
-      <div class="share-code-box" id="embedCodeBox" onclick="selectEmbedCode()" style="font-size:10px;line-height:1.6"></div>
-      <button class="copy-btn" id="copyEmbedBtn" onclick="copyEmbedCode()">📋 Embed-Code kopieren</button>
-    </div>
-    <!-- Card panel -->
-    <div class="share-panel" id="sharePanelCard">
-      <div class="modal-sub" style="margin-top:0">Visuellen Countdown als Bild herunterladen oder teilen.</div>
-      <div class="share-card-canvas-wrap"><canvas id="shareCardCanvas" width="600" height="340"></canvas></div>
-      <button class="copy-btn" onclick="downloadShareCard()">⬇ Card als PNG speichern</button>
     </div>
     <div class="form-actions" style="margin-top:12px">
       <button class="btn-secondary" onclick="document.getElementById('shareModal').classList.remove('open')">Schließen</button>
@@ -882,35 +855,49 @@ canvas#shareCardCanvas{border-radius:12px;max-width:100%;}
 </div>
 
 
-<!-- ── ROOM MODAL ── -->
+<!-- ── ROOM MODAL — single canonical version ── -->
 <div class="modal-overlay" id="roomModal">
   <div class="modal">
     <div class="modal-title">👥 Geteilter Raum</div>
     <div class="modal-sub">Erstelle einen Raum oder tritt einem bei — alle Mitglieder sehen dieselben Countdowns in Echtzeit.</div>
+
+    <!-- Not in a room -->
     <div id="roomJoinSection">
-      <div class="form-group"><label class="form-label">Neuen Raum erstellen</label>
-        <button class="btn-primary" style="width:100%" onclick="createRoom()">✦ Neuen Raum erstellen</button>
+      <div class="form-group">
+        <label class="form-label">Neuen Raum erstellen</label>
+        <button class="btn-primary" style="width:100%;margin-top:4px" onclick="createRoom()">✦ Raum erstellen</button>
       </div>
-      <div style="text-align:center;font-size:11px;color:var(--tm);margin:8px 0">— oder beitreten —</div>
-      <div class="form-group"><label class="form-label">Raum-Code eingeben</label>
-        <div style="display:flex;gap:7px">
-          <input type="text" class="form-input" id="roomCodeInput" placeholder="z.B. NOVA-42" style="text-transform:uppercase;letter-spacing:1px">
-          <button class="btn-primary" style="flex:0;padding:9px 14px" onclick="joinRoom()">Beitreten</button>
+      <div class="section-divider">oder beitreten</div>
+      <div class="form-group">
+        <label class="form-label">Raum-Code eingeben</label>
+        <div style="display:flex;gap:6px">
+          <input type="text" class="form-input" id="roomCodeInput" placeholder="z.B. NOVA-42" style="text-transform:uppercase;letter-spacing:2px;font-size:15px;font-weight:700">
+          <button class="btn-primary" style="flex:0;padding:9px 14px;white-space:nowrap" onclick="joinRoom()">Beitreten</button>
         </div>
+        <div id="roomJoinStatus" style="font-size:11px;margin-top:6px;min-height:14px"></div>
       </div>
-      <div id="roomJoinStatus" style="font-size:11px;min-height:14px;margin-top:-6px"></div>
     </div>
+
+    <!-- Inside a room -->
     <div id="roomActiveSection" style="display:none">
-      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:12px 14px;margin-bottom:14px">
-        <div style="font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--tm);margin-bottom:4px">Aktueller Raum</div>
-        <div id="roomActiveCode" style="font-size:20px;font-weight:700;letter-spacing:2px;color:var(--accent)"></div>
-        <div id="roomMemberCount" style="font-size:11px;color:var(--tm);margin-top:2px"></div>
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:16px">
+        <div style="font-size:11px;color:var(--tm);margin-bottom:4px">Aktiver Raum</div>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
+          <div style="font-size:22px;font-weight:800;letter-spacing:4px;color:var(--accent)" id="roomActiveCode"></div>
+          <button class="edit-btn" onclick="copyRoomCode()" style="font-size:10px">📋 Code kopieren</button>
+        </div>
+        <div style="font-size:11px;color:var(--tm);margin-top:6px" id="roomMemberCount"></div>
       </div>
-      <button class="copy-btn" id="roomCopyBtn" onclick="copyRoomCode()" style="margin-bottom:8px">📋 Code kopieren</button>
-      <div style="font-size:11px;color:var(--tm);margin-bottom:14px;line-height:1.7">Teile den Code mit Freunden. Alle im Raum können Countdowns sehen, hinzufügen und bearbeiten.</div>
-      <button class="btn-secondary" style="width:100%" onclick="leaveRoom()">Raum verlassen</button>
+      <div style="font-size:11px;color:var(--tm);margin-bottom:12px;line-height:1.7">
+        Teile den Code mit Freunden — alle im Raum sehen dieselben Countdowns in Echtzeit.<br>
+        Deine persönlichen Countdowns bleiben privat.
+      </div>
+      <button class="btn-secondary" style="width:100%;font-size:12px" onclick="leaveRoom()">Raum verlassen</button>
     </div>
-    <div class="form-actions" style="margin-top:12px"><button class="btn-secondary" onclick="document.getElementById('roomModal').classList.remove('open')">Schließen</button></div>
+
+    <div class="form-actions" style="margin-top:12px">
+      <button class="btn-secondary" onclick="document.getElementById('roomModal').classList.remove('open')">Schließen</button>
+    </div>
   </div>
 </div>
 <!-- ── GCAL MODAL ── -->
@@ -960,6 +947,9 @@ let settings   = JSON.parse(localStorage.getItem('cs4_settings') || '{"cats":[]}
 let activeTab = 'countdowns';
 let roomCountdowns = [];
 let activeCountdownId = null, activeTrackerId = null;
+// Rooms state — declared here so switchTab can reference currentRoom immediately
+let currentRoom = JSON.parse(localStorage.getItem('cs4_room')||'null');
+let unsubRoom = null;
 let editCdId = null, editTrId = null;
 let liveTimer = null;
 // activeCatFilter removed — sidebar sections used instead
@@ -1058,9 +1048,6 @@ function dpClick(dstr, cId, hId){
 }
 function dpRemove(dstr,cId,hId){ dpState.selected.delete(dstr); dpState.rangeStart=null; dpRender(cId,hId); }
 function dpNav(delta,cId,hId){ dpState.month.setMonth(dpState.month.getMonth()+delta); dpRender(cId,hId); }
-
-// Init picker when exclude section opens
-const _origTogSec = togSec;
 
 // ═══════════════ SHARE CARD ═══════════════
 function generateShareCard(id){
@@ -1211,83 +1198,6 @@ function copyEmbedCode(){
   updateEmbed(); setInterval(updateEmbed,60000);
 })();
 
-// ═══════════════ MULTIPLAYER ROOMS ═══════════════
-let myRooms = JSON.parse(localStorage.getItem('cs4_rooms') || '[]');
-let activeRoomId = null;
-let unsubRoom = null;
-function saveRooms(){ localStorage.setItem('cs4_rooms', JSON.stringify(myRooms)); }
-
-
-function renderMyRooms(){
-  const div=document.getElementById('myRoomsDivider'), list=document.getElementById('myRoomsList');
-  if(!myRooms.length){ div.style.display='none'; list.innerHTML=''; return; }
-  div.style.display='block';
-  list.innerHTML=myRooms.map(r=>`
-    <div style="display:flex;align-items:center;gap:10px;padding:9px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;margin-bottom:5px">
-      <div style="flex:1;min-width:0">
-        <div style="font-size:13px;font-weight:600">${r.name}</div>
-        <div style="font-size:10px;color:var(--tm);font-family:monospace;letter-spacing:1px">${r.id}</div>
-      </div>
-      <button class="btn-secondary" style="font-size:10px;padding:5px 9px" onclick="openRoom('${r.id}','${r.name}')">Öffnen</button>
-      <button class="btn-secondary" style="font-size:10px;padding:5px 9px" onclick="removeMyRoom('${r.id}')">✕</button>
-    </div>`).join('');
-}
-
-
-
-
-function openRoom(roomId, roomName){
-  activeRoomId=roomId;
-  document.getElementById('roomsContent').style.display='none';
-  document.getElementById('roomsCloseRow').style.display='none';
-  document.getElementById('activeRoomView').style.display='block';
-  document.getElementById('activeRoomName').textContent=roomName;
-  document.getElementById('activeRoomCode').textContent=roomId;
-  // Subscribe to room countdowns
-  if(unsubRoom) unsubRoom();
-  if(window.fbListenRoom){
-    unsubRoom=window.fbListenRoom(roomId, docs=>{
-      const list=document.getElementById('roomCountdownList');
-      if(!list) return;
-      if(!docs.length){ list.innerHTML='<div class="empty-state">Noch keine Countdowns in diesem Raum.</div>'; return; }
-      list.innerHTML=docs.map(cd=>{
-        const {count,isPast}=countDays(cd.date,cd.mode,cd.wdays,cd.exclude||[],cd.include||[],null);
-        return `<div class="list-item" style="cursor:default">
-          <div class="list-item-top">
-            <div class="list-item-emoji">${cd.emoji}</div>
-            <div class="list-item-body">
-              <div class="list-item-name">${cd.name}</div>
-              <div class="list-item-countdown ${isPast?'past':''}">${isPast?'vor '+count+' Tagen':'in '+count+' Tagen'}</div>
-              <div class="list-item-meta">${fmtDate(cd.date)}</div>
-            </div>
-          </div>
-        </div>`;
-      }).join('');
-    });
-  }
-}
-
-function leaveActiveRoom(){
-  if(unsubRoom){ unsubRoom(); unsubRoom=null; }
-  activeRoomId=null;
-  document.getElementById('activeRoomView').style.display='none';
-  document.getElementById('roomsContent').style.display='block';
-  document.getElementById('roomsCloseRow').style.display='flex';
-}
-
-function removeMyRoom(id){ myRooms=myRooms.filter(r=>r.id!==id); saveRooms(); renderMyRooms(); }
-
-function addCountdownToRoom(){
-  if(!activeRoomId){ return; }
-  // Open countdown picker — simple: pick from existing countdowns
-  const names=countdowns.map((cd,i)=>`${i+1}. ${cd.emoji} ${cd.name}`).join('\n');
-  if(!names){ alert('Keine Countdowns vorhanden.'); return; }
-  const idx=prompt('Welchen Countdown hinzufügen?\n'+names+'\nNummer eingeben:');
-  const cd=countdowns[parseInt(idx)-1]; if(!cd) return;
-  if(window.fbAddToRoom) window.fbAddToRoom(activeRoomId,cd)
-    .then(()=>{ const st=document.getElementById('roomStatus'); })
-    .catch(e=>console.error(e));
-}
 // ═══════════════ FIREBASE BRIDGE ═══════════════
 // Expose local data to the Firebase ES module
 window._localCountdowns = () => countdowns;
@@ -1605,19 +1515,19 @@ const APP_LOGO_LIGHT = 'https://i.ibb.co/VY4gXPLv/cdstudioblack.png'; // light m
 function getLogoUrl(){
   return (settings.theme === 'light') ? APP_LOGO_LIGHT : APP_LOGO;
 }
+function _logoFallback(){
+  const wrap = document.getElementById('logoWrap');
+  if(wrap) wrap.innerHTML = `<div class="logo-default"><div class="logo-icon">⏳</div><span class="logo-text">${APP_NAME}</span></div>`;
+}
 function applyBranding(){
   document.title = APP_NAME;
   const wrap = document.getElementById('logoWrap');
   if(!wrap) return;
   if(APP_LOGO){
     const src = getLogoUrl();
-    const fallbackHtml = `<div class="logo-default"><div class="logo-icon">⏳</div><span class="logo-text">${APP_NAME}</span></div>`;
-    wrap.dataset.fallback = fallbackHtml;
-    wrap.innerHTML = `<img class="logo-img" src="${src}" alt="${APP_NAME}"
-      onerror="this.style.display='none';var fb=this.parentElement.dataset.fallback;if(fb)this.parentElement.innerHTML=fb;">`;
+    wrap.innerHTML = `<img class="logo-img" src="${src}" alt="${APP_NAME}" onerror="_logoFallback()">`;
   } else {
-    const txt = document.getElementById('logoText');
-    if(txt) txt.textContent = APP_NAME;
+    wrap.innerHTML = `<div class="logo-default"><div class="logo-icon">⏳</div><span class="logo-text">${APP_NAME}</span></div>`;
   }
 }
 function openSettings(){
@@ -1949,8 +1859,7 @@ function showCdWelcome(){ document.getElementById('mainContent').innerHTML=`<div
 
 function selectCountdown(id){
   activeCountdownId=id; activeTrackerId=null;
-  renderCdDetail(id);
-  renderList();
+  renderList(); renderCdDetail(id);
 }
 
 function renderCdDetail(id){
@@ -2005,7 +1914,9 @@ function renderCdDetail(id){
     return `<div class="counter-number">${count}</div><div class="counter-unit">${count===1?'Tag':'Tage'} verbleibend</div>`;
   }
 
-  const roomBtn = currentRoom ? '<button class="edit-btn" onclick="addToRoom(\''+cd.id+'\')">👥 Raum</button>' : '';
+  const roomBtn = currentRoom
+    ? '<button class="edit-btn" onclick="addToRoom(\''+cd.id+'\')">👥 Raum hinzufügen</button>'
+    : '<button class="edit-btn" onclick="openRoomModal()">👥 Raum</button>';
   const excNote = cd.exclude?.length ? ' · '+cd.exclude.length+' Ausschlüsse' : '';
   const incNote = cd.include?.length ? ' · '+cd.include.length+' Einschlüsse' : '';
   document.getElementById('mainContent').innerHTML=`
@@ -2156,8 +2067,8 @@ function switchTab(tab,btn){
   document.getElementById('tab-'+tab).classList.add('active');
   document.getElementById('newBtn').textContent=tab==='countdowns'?'+ Countdown':'+ Tracker';
   document.getElementById('newBtn').onclick=handleNewBtn;
-  const icsBtn=document.querySelectorAll('.icon-btn:not(#roomBtn)');
-  icsBtn.forEach(b=>b.style.display=tab==='countdowns'?'flex':'none');
+  const icsBtn=document.querySelectorAll('.icon-btn');
+  icsBtn.forEach(b=>b.style.display='flex');
   if(tab==='tracker'&&!activeTrackerId) showTrWelcome();
   if(tab==='countdowns'&&!activeCountdownId) showCdWelcome();
 }
@@ -2431,8 +2342,9 @@ async function importSelected(){
 })();
 
 // ═══════════════ OVERLAY CLOSE ═══════════════
-['modalOverlay','trackerModal','shareModal','importModal','settingsModal','gcalOverlay','roomsModal'].forEach(id=>{
-  document.getElementById(id).addEventListener('click',function(e){if(e.target===this)this.classList.remove('open');});
+['modalOverlay','trackerModal','shareModal','importModal','settingsModal','gcalOverlay','roomModal'].forEach(id=>{
+  const el = document.getElementById(id);
+  if(el) el.addEventListener('click',function(e){if(e.target===this)this.classList.remove('open');});
 });
 
 // ═══════════════ SHARE CARD ═══════════════
@@ -2579,10 +2491,24 @@ function copyEmbedCode(){
 }
 
 // ═══════════════ ROOMS ═══════════════
-let currentRoom = JSON.parse(localStorage.getItem('cs4_room')||'null');
+// currentRoom and unsubRoom already declared at top of STATE section
 roomCountdowns = []; // (declared above)
 
 function saveRoom(room){ currentRoom=room; localStorage.setItem('cs4_room', JSON.stringify(room)); }
+
+function genRoomCode(){
+  return Math.random().toString(36).slice(2,8).toUpperCase();
+}
+
+
+
+
+function copyRoomCode(){
+  if(!currentRoom) return;
+  if(navigator.clipboard) navigator.clipboard.writeText(currentRoom.code);
+  else { const ta=document.createElement('textarea');ta.value=currentRoom.code;document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta); }
+}
+
 
 window._onRoomCountdowns = function(cds){ roomCountdowns=cds; renderRoomTab(); };
 
@@ -2590,6 +2516,40 @@ function renderRoomTab(){
   // Update room indicator in sidebar
   const btn = document.getElementById('roomBtn');
   if(btn) btn.style.color = currentRoom ? 'var(--green)' : '';
+  // If room tab is active, refresh it
+  if(activeTab==='room') renderRoomContent();
+}
+
+function renderRoomContent(){
+  const main = document.getElementById('mainContent');
+  if(!currentRoom){
+    main.innerHTML=`<div class="welcome-screen"><div class="welcome-icon">👥</div><div class="welcome-title">Kein Raum aktiv</div><div class="welcome-sub">Erstelle oder tritt einem Raum bei<br>über den Raum-Button links.</div></div>`;
+    return;
+  }
+  // Room header + countdown list
+  let html = `<div class="detail-header">
+    <div class="detail-emoji">👥</div>
+    <div class="detail-title-wrap"><div class="detail-name">${currentRoom.name}</div><div class="detail-date-label">Code: <strong style="letter-spacing:2px;color:var(--accent)">${currentRoom.code}</strong></div></div>
+    <button class="edit-btn" onclick="openRoomModal()">⚙ Raum</button>
+  </div>`;
+  if(!roomCountdowns.length){
+    html += `<div style="text-align:center;padding:32px;color:var(--tm);font-size:13px">Noch keine Countdowns im Raum.<br>Erstelle den ersten!</div>`;
+  } else {
+    html += `<div style="display:flex;flex-direction:column;gap:6px">`;
+    roomCountdowns.forEach(cd=>{
+      const {count,isPast}=countDays(cd.date,cd.mode,cd.wdays,cd.exclude,cd.include,cd.start);
+      const label=isPast?`vor ${count} Tagen`:`in ${count} Tagen`;
+      html += `<div class="stat-card" style="text-align:left;cursor:pointer;padding:14px" onclick="selectCountdown('${cd.id}')">
+        <div style="display:flex;align-items:center;gap:10px">
+          <div style="font-size:24px">${cd.emoji}</div>
+          <div><div style="font-weight:700">${cd.name}</div><div style="font-size:11px;color:var(--tm)">${fmtDate(cd.date)}</div></div>
+          <div style="margin-left:auto;font-size:18px;font-weight:700;color:var(--accent)">${label}</div>
+        </div>
+      </div>`;
+    });
+    html += `</div>`;
+  }
+  main.innerHTML = html;
 }
 
 // Init room if saved
@@ -2608,8 +2568,11 @@ function updateRoomUI(){
   document.getElementById('roomActiveSection').style.display = active?'block':'none';
   if(active){
     document.getElementById('roomActiveCode').textContent = currentRoom.code;
-    document.getElementById('roomMemberCount').textContent = `Beigetreten als ${window.fbUser?.displayName||'Gast'}`;
+    document.getElementById('roomMemberCount').textContent = `Beigetreten als ${window.fbUser?.displayName||'Gast'} · Code teilen um andere einzuladen`;
   }
+  // Update room button color in sidebar
+  const roomBtn = document.getElementById('roomBtn');
+  if(roomBtn) roomBtn.style.color = active ? 'var(--green)' : '';
 }
 
 function generateRoomCode(){
@@ -2621,15 +2584,22 @@ function generateRoomCode(){
 
 async function createRoom(){
   if(!window.fbUser){
-    const st = document.getElementById('roomJoinStatus');
-    if(st){ st.style.color='#e07070'; st.textContent='Bitte zuerst mit Google anmelden (unten links).'; }
+    const msg = document.createElement('div');
+    msg.style.cssText = 'color:#e07070;font-size:12px;margin-top:8px;text-align:center';
+    msg.textContent = 'Bitte zuerst mit Google anmelden (unten links).';
+    const sec = document.getElementById('roomJoinSection');
+    // Remove old error msg if any
+    const old = sec.querySelector('.room-auth-error');
+    if(old) old.remove();
+    msg.className = 'room-auth-error';
+    sec.appendChild(msg);
     return;
   }
   const code = generateRoomCode();
   currentRoom = {code, owner:window.fbUser.uid, created:Date.now()};
   saveRoom(currentRoom);
   try {
-    if(window.fbCreateRoom) await window.fbCreateRoom(code, { owner: window.fbUser.uid, created: Date.now() });
+    if(window.fbCreateRoom) await window.fbCreateRoom(code, {owner: window.fbUser.uid, created: Date.now()});
   } catch(e) { console.warn('Room create error:', e); }
   subscribeRoom(code);
   updateRoomUI();
@@ -2638,8 +2608,14 @@ async function createRoom(){
 
 async function joinRoom(){
   if(!window.fbUser){
-    const st = document.getElementById('roomJoinStatus');
-    if(st){ st.style.color='#e07070'; st.textContent='Bitte zuerst mit Google anmelden (unten links).'; }
+    const msg = document.createElement('div');
+    msg.style.cssText = 'color:#e07070;font-size:12px;margin-top:8px;text-align:center';
+    msg.textContent = 'Bitte zuerst mit Google anmelden (unten links).';
+    const sec = document.getElementById('roomJoinSection');
+    const old = sec.querySelector('.room-auth-error');
+    if(old) old.remove();
+    msg.className = 'room-auth-error';
+    sec.appendChild(msg);
     return;
   }
   const code = document.getElementById('roomCodeInput').value.trim().toUpperCase();
@@ -2673,9 +2649,14 @@ function subscribeRoom(code){
 }
 
 function renderRoomSidebar(){
-  // Update the room button indicator
-  const btn = document.getElementById('roomBtn');
-  if(btn) btn.style.color = currentRoom ? 'var(--green)' : '';
+  // Update room button indicator
+  const roomBtn = document.getElementById('roomBtn');
+  if(roomBtn) roomBtn.style.color = currentRoom ? 'var(--green)' : '';
+  // If currently showing countdowns tab and in a room, re-render detail if viewing a room countdown
+  if(activeTab === 'countdowns' && activeCountdownId) {
+    const inRoom = roomCountdowns.find(c=>c.id===activeCountdownId);
+    // Don't re-render personal countdown detail; room countdowns are shown via selectRoomCountdown
+  }
 }
 
 function selectRoomCountdown(id){
@@ -2720,21 +2701,19 @@ function renderRoomMain(){
 
 function copyRoomCode(){
   const code=currentRoom?.code; if(!code) return;
-  const btn=document.getElementById('roomCopyBtn');
-  if(navigator.clipboard) navigator.clipboard.writeText(code).then(()=>{if(btn){btn.textContent='✓ Kopiert!';setTimeout(()=>btn.textContent='📋 Code kopieren',2000);}});
+  if(navigator.clipboard) navigator.clipboard.writeText(code);
   else { const ta=document.createElement('textarea');ta.value=code;document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta); }
 }
-
-// switchTab extension placeholder (rooms now use modal)
-const _origSwitchTab = null;
 
 function addToRoom(id){
   if(!currentRoom){openRoomModal();return;}
   const cd=countdowns.find(c=>c.id===id); if(!cd)return;
-  if(window.fbAddToRoom) window.fbAddToRoom(currentRoom.code, cd);
-  // Visual feedback
-  const btn=event.target; btn.textContent='✓ Hinzugefügt'; btn.style.color='var(--green)';
-  setTimeout(()=>{btn.textContent='👥 Raum';btn.style.color='';},2000);
+  if(window.fbAddToRoom) window.fbAddToRoom(currentRoom.code, cd)
+    .then(()=>{
+      // re-render detail to update button label
+      renderCdDetail(id);
+    })
+    .catch(e=>console.error('addToRoom error:',e));
 }
 
 // ═══════════════ MOBILE TOUCH DRAG ═══════════════
