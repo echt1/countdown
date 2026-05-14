@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Countdown Studio</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
 <script type="module">
 // ═══════════════════════════════════════════════════════════
 // FIREBASE — loaded as ES module, exposes helpers to window
@@ -117,6 +119,31 @@ window.fbAddToRoom = async (roomId, cd) => {
   const cleanCd = {...cd}; delete cleanCd._ts;
   await setDoc(doc(db, 'rooms', roomId, 'countdowns', cd.id), {...cleanCd, _ts: serverTimestamp()});
 };
+
+// Per-countdown bidirectional live share
+window.fbShareCountdown = async (cd) => {
+  const roomId = 'live-' + cd.id;
+  await setDoc(doc(db, 'rooms', roomId), {cdId: cd.id, created: serverTimestamp(), type:'cd-live'});
+  const cleanCd = {...cd}; delete cleanCd._ts;
+  await setDoc(doc(db, 'rooms', roomId, 'countdowns', cd.id), {...cleanCd, _ts: serverTimestamp()});
+  return roomId;
+};
+
+window.fbUpdateLiveCd = async (cd) => {
+  const roomId = 'live-' + cd.id;
+  const cleanCd = {...cd}; delete cleanCd._ts;
+  await setDoc(doc(db, 'rooms', roomId, 'countdowns', cd.id), {...cleanCd, _ts: serverTimestamp()});
+};
+
+window.fbListenLiveCd = (cdId, callback) => {
+  const roomId = 'live-' + cdId;
+  const col = collection(db, 'rooms', roomId, 'countdowns');
+  return onSnapshot(col, snap => {
+    const docs = snap.docs.map(d => { const x={...d.data()}; delete x._ts; return x; });
+    callback(docs);
+  });
+};
+
 </script>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
 <style>
@@ -609,12 +636,8 @@ canvas#shareCardCanvas{border-radius:12px;max-width:100%;}
         </div>
       </div>
       <div class="sidebar-actions" id="sidebarActions">
-        <button class="new-btn" id="newBtn" onclick="handleNewBtn()">+ Neu</button>
-        <button class="icon-btn" onclick="openGcalModal()">
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>ICS
-        </button>
-        <button class="icon-btn" onclick="openImportModal()">↓ Code</button>
-        <button class="icon-btn" id="roomBtn" onclick="openRoomModal()" title="Geteilter Raum">👥</button>
+        <button class="new-btn" id="newBtn" onclick="handleNewBtn()" style="flex:2">+ Countdown</button>
+        <button class="new-btn" onclick="openImportPickerModal()" style="flex:1;background:var(--surface2);border:1px solid var(--border2);color:var(--td);box-shadow:none;font-weight:600">↓ Import</button>
       </div>
     </div>
     <div class="tab-bar">
@@ -758,16 +781,17 @@ canvas#shareCardCanvas{border-radius:12px;max-width:100%;}
       <button class="share-tab" onclick="switchShareTab('qr',this)">QR-Code</button>
       <button class="share-tab" onclick="switchShareTab('card',this)">🎨 Card</button>
       <button class="share-tab" onclick="switchShareTab('embed',this)">🔗 Einbetten</button>
+      <button class="share-tab" onclick="switchShareTab('live',this)">🔴 Live</button>
     </div>
     <!-- Code panel -->
     <div class="share-panel active" id="sharePanelCode">
-      <div class="modal-sub" style="margin-top:0">Teile diesen Code — Freunde können ihn über "↓ Code" importieren.</div>
+      <div class="modal-sub" style="margin-top:0">Teile diesen Code — Freunde können ihn über "↓ Import" importieren.</div>
       <div class="share-code-box" id="shareCodeBox" onclick="selectShareCode()"></div>
       <button class="copy-btn" id="copyBtn" onclick="copyShareCode()">📋 Code kopieren</button>
     </div>
     <!-- QR panel -->
     <div class="share-panel" id="sharePanelQR">
-      <div class="modal-sub" style="margin-top:0">QR-Code scannen → Screenshot machen und Code in die App kopieren.</div>
+      <div class="modal-sub" style="margin-top:0">QR-Code scannen → "Online"-Tab im Import öffnen → QR scannen.</div>
       <div class="qr-box" id="qrBox"></div>
       <button class="copy-btn" id="qrDownloadBtn" onclick="downloadQR()">⬇ QR-Code speichern</button>
     </div>
@@ -791,20 +815,114 @@ canvas#shareCardCanvas{border-radius:12px;max-width:100%;}
       <div class="share-code-box" id="embedCodeBox" onclick="selectEmbedCode()" style="font-size:10px;line-height:1.5"></div>
       <button class="copy-btn" id="embedCopyBtn" onclick="copyEmbedCode()">📋 Code kopieren</button>
     </div>
+    <!-- Live panel -->
+    <div class="share-panel" id="sharePanelLive">
+      <div class="modal-sub" style="margin-top:0">Teile diesen Countdown live — Änderungen beider Seiten werden sofort synchronisiert.</div>
+      <div id="liveShareCodeWrap" style="display:none;margin-bottom:14px">
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px 16px;text-align:center">
+          <div style="font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--tm);margin-bottom:8px">Live-Code</div>
+          <div id="liveShareCode" style="font-size:28px;font-weight:800;letter-spacing:6px;color:var(--accent)"></div>
+          <div style="font-size:11px;color:var(--tm);margin-top:6px">Anderen geben diesen Code im "↓ Import → Online"-Tab ein</div>
+        </div>
+        <div id="liveQrBox" style="display:flex;justify-content:center;margin-top:12px"></div>
+        <button class="copy-btn" style="margin-top:8px" onclick="copyLiveCode()">📋 Code kopieren</button>
+        <button class="btn-secondary" style="width:100%;font-size:11px;margin-top:6px" id="stopLiveBtn" onclick="stopLiveShareCurrent()">Live-Sync stoppen</button>
+      </div>
+      <div id="liveShareStatus" style="font-size:11px;min-height:14px;margin-bottom:12px"></div>
+      <button class="btn-primary" style="width:100%" id="startLiveBtn" onclick="shareLiveCurrent()">🔴 Live-Sync starten</button>
+    </div>
     <div class="form-actions" style="margin-top:12px">
       <button class="btn-secondary" onclick="document.getElementById('shareModal').classList.remove('open')">Schließen</button>
     </div>
   </div>
 </div>
 
-<!-- ── IMPORT MODAL ── -->
+
+<!-- ── IMPORT PICKER MODAL ── -->
+<div class="modal-overlay" id="importPickerModal">
+  <div class="modal">
+    <div class="modal-title">↓ Importieren</div>
+    <div class="share-tabs" style="margin-bottom:16px">
+      <button class="share-tab active" onclick="switchImportTab('code',this)">📋 Code</button>
+      <button class="share-tab" onclick="switchImportTab('ics',this)">📅 ICS</button>
+      <button class="share-tab" onclick="switchImportTab('online',this)">👥 Online</button>
+    </div>
+
+    <!-- Code tab -->
+    <div class="share-panel active" id="importTabCode">
+      <div class="modal-sub" style="margin-top:0">Füge einen geteilten Countdown-Code ein, um ihn zu importieren.</div>
+      <div class="form-group"><label class="form-label">Share-Code</label>
+        <textarea class="extra-dates-input" id="importCodeInput" placeholder="Code hier einfügen…" style="min-height:80px"></textarea>
+      </div>
+      <div id="importStatus" style="font-size:11px;min-height:14px;margin-top:-6px;margin-bottom:8px;color:var(--green)"></div>
+      <div class="form-actions">
+        <button class="btn-secondary" onclick="document.getElementById('importPickerModal').classList.remove('open')">Abbrechen</button>
+        <button class="btn-primary" onclick="doImportCode()">Importieren</button>
+      </div>
+    </div>
+
+    <!-- ICS tab -->
+    <div class="share-panel" id="importTabIcs">
+      <div class="modal-sub" style="margin-top:0">Importiere Events aus einem Google Calendar ICS-Link als Countdowns.</div>
+      <div id="importIcsInner">
+        <!-- Same as gcalModal content — we'll share the same function -->
+        <div class="form-group">
+          <label class="form-label">ICS-URL</label>
+          <input type="text" class="form-input" id="gcalUrl2" placeholder="https://calendar.google.com/…/basic.ics">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Feed-Name (wird Kategorie)</label>
+          <input type="text" class="form-input" id="gcalName2" placeholder="z.B. Schule, Arbeit…" maxlength="30">
+        </div>
+        <div id="savedFeedsWrap2" style="margin-bottom:10px"></div>
+        <div id="gcalStatus2" style="font-size:11px;min-height:14px;margin-bottom:8px;color:var(--green)"></div>
+        <div class="form-actions">
+          <button class="btn-secondary" onclick="document.getElementById('importPickerModal').classList.remove('open')">Abbrechen</button>
+          <button class="btn-primary" onclick="doGcalImport2()">Importieren</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Online / Room tab -->
+    <div class="share-panel" id="importTabOnline">
+      <div class="modal-sub" style="margin-top:0">Tritt einem geteilten Countdown bei — gib den 5-stelligen Live-Code ein.</div>
+      <div class="form-group">
+        <label class="form-label">Live-Code</label>
+        <div style="display:flex;gap:6px;align-items:center">
+          <input type="text" class="form-input" id="liveCodeInput" placeholder="z.B. AB3K7"
+            style="text-transform:uppercase;letter-spacing:3px;font-size:16px;font-weight:700;flex:1">
+          <button class="btn-primary" style="flex:0;padding:9px 14px;white-space:nowrap" onclick="joinCdRoom()">Beitreten</button>
+        </div>
+      </div>
+      <!-- QR Scanner -->
+      <div style="margin-top:4px;margin-bottom:12px">
+        <button class="btn-secondary" style="width:100%;font-size:12px;gap:6px;display:flex;align-items:center;justify-content:center" onclick="toggleQrScanner()">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="4" height="4" rx=".5"/></svg>
+          QR-Code scannen
+        </button>
+        <div id="qrScannerWrap" style="display:none;margin-top:10px">
+          <div style="position:relative;border-radius:10px;overflow:hidden;background:#000">
+            <video id="qrVideo" style="width:100%;display:block;border-radius:10px" playsinline autoplay muted></video>
+            <canvas id="qrScanCanvas" style="display:none"></canvas>
+            <div style="position:absolute;inset:0;border:2px solid var(--accent);border-radius:10px;pointer-events:none;opacity:.6"></div>
+          </div>
+          <div id="qrScanStatus" style="font-size:11px;color:var(--tm);text-align:center;margin-top:6px">Kamera sucht nach QR-Code…</div>
+          <button class="btn-secondary" style="width:100%;font-size:11px;margin-top:8px" onclick="stopQrScanner()">Kamera schließen</button>
+        </div>
+      </div>
+      <div id="liveJoinStatus" style="font-size:11px;min-height:14px;color:var(--green)"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── IMPORT MODAL (legacy, keep for compat) ── -->
 <div class="modal-overlay" id="importModal">
   <div class="modal">
     <div class="modal-title">↓ Code importieren</div>
     <div class="modal-sub">Füge einen geteilten Countdown-Code ein.</div>
-    <div class="form-group"><label class="form-label">Share-Code</label><textarea class="extra-dates-input" id="importCodeInput" placeholder="Code hier einfügen…" style="min-height:80px"></textarea></div>
-    <div id="importStatus" style="font-size:11px;min-height:14px;margin-top:-6px;margin-bottom:8px;"></div>
-    <div class="form-actions"><button class="btn-secondary" onclick="document.getElementById('importModal').classList.remove('open')">Abbrechen</button><button class="btn-primary" onclick="doImportCode()">Importieren</button></div>
+    <div class="form-group"><label class="form-label">Share-Code</label><textarea class="extra-dates-input" id="importCodeInputLegacy" placeholder="Code hier einfügen…" style="min-height:80px"></textarea></div>
+    <div id="importStatusLegacy" style="font-size:11px;min-height:14px;margin-top:-6px;margin-bottom:8px;"></div>
+    <div class="form-actions"><button class="btn-secondary" onclick="document.getElementById('importModal').classList.remove('open')">Abbrechen</button><button class="btn-primary" onclick="doImportCodeLegacy()">Importieren</button></div>
   </div>
 </div>
 
@@ -848,7 +966,7 @@ canvas#shareCardCanvas{border-radius:12px;max-width:100%;}
     </div>
     <div class="settings-section" style="margin-top:14px">
       <div class="settings-section-title">Über</div>
-      <div style="font-size:12px;color:var(--tm);line-height:1.8">Version 0.8 · Gebaut mit ❤️<br>Weitere Features kommen bald.</div>
+      <div style="font-size:12px;color:var(--tm);line-height:1.8">Version <strong style="color:var(--td)">0.9</strong> · Gebaut mit ❤️<br>Weitere Features kommen bald.</div>
     </div>
     <div class="form-actions"><button class="btn-primary" onclick="document.getElementById('settingsModal').classList.remove('open')">Fertig</button></div>
   </div>
@@ -1425,9 +1543,38 @@ function openShareModal(id){
       colorLight: isDark?'#1a0f0c':'#ffffff',
       correctLevel:QRCode.CorrectLevel.M});
   }catch(e){ qrBox.innerHTML='<div style="font-size:11px;color:var(--tm);padding:16px">QR-Bibliothek nicht geladen.</div>'; }
+  // Init live tab state
+  const liveWrap = document.getElementById('liveShareCodeWrap');
+  const liveSt = document.getElementById('liveShareStatus');
+  const startBtn = document.getElementById('startLiveBtn');
+  if(liveWrap && liveSt && startBtn){
+    if(cd._live && cd._liveCode){
+      liveWrap.style.display='block';
+      document.getElementById('liveShareCode').textContent = cd._liveCode;
+      startBtn.style.display='none';
+      liveSt.textContent='';
+      // Regenerate QR for live code
+      const liveQrBox=document.getElementById('liveQrBox');
+      if(liveQrBox){ liveQrBox.innerHTML='';
+        try{ const isDark=settings.theme!=='light';
+          new QRCode(liveQrBox,{text:cd._liveCode,width:160,height:160,
+            colorDark:isDark?'#f0a882':'#1a0f0a',colorLight:isDark?'#1a0f0c':'#ffffff',correctLevel:QRCode.CorrectLevel.M});
+        }catch(e){} }
+    } else {
+      liveWrap.style.display='none';
+      startBtn.style.display='block';
+      liveSt.textContent='';
+    }
+  }
   window._currentShareId = id;
   document.getElementById('shareModal').classList.add('open');
 }
+
+// Called from "🔴 Live-Sync starten" button in share modal
+function shareLiveCurrent(){ shareLive(window._currentShareId); }
+function stopLiveShareCurrent(){ stopLiveShare(window._currentShareId); const liveWrap=document.getElementById('liveShareCodeWrap'); if(liveWrap) liveWrap.style.display='none'; const startBtn=document.getElementById('startLiveBtn'); if(startBtn) startBtn.style.display='block'; }
+function copyLiveCode(){ const code=document.getElementById('liveShareCode').textContent; if(!code) return; if(navigator.clipboard) navigator.clipboard.writeText(code); else { const ta=document.createElement('textarea');ta.value=code;document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta); } }
+
 
 let currentShareCd = null;
 function switchShareTab(tab, btn){
@@ -1470,16 +1617,216 @@ function fallbackCopy(text,btn){
   catch(e){ selectShareCode(); btn.textContent='Text oben manuell kopieren'; }
   document.body.removeChild(ta);
 }
-function openImportModal(){ document.getElementById('importCodeInput').value=''; document.getElementById('importStatus').textContent=''; document.getElementById('importModal').classList.add('open'); }
-function doImportCode(){
-  const code=document.getElementById('importCodeInput').value.trim();
-  const cd=decodeCD(code);
-  const st=document.getElementById('importStatus');
-  if(!cd||!cd.date||!cd.name){ st.style.color='#e07070'; st.textContent='Ungültiger Code.'; return; }
-  countdowns.unshift(cd); saveCd(); renderList();
-  st.style.color='var(--green)'; st.textContent='✓ Importiert!';
-  setTimeout(()=>{ document.getElementById('importModal').classList.remove('open'); selectCountdown(cd.id); },700);
+function openImportModal(){ openImportPickerModal(); } // legacy alias
+function openImportPickerModal(){
+  document.getElementById('importPickerModal').classList.add('open');
+  switchImportTab('code', document.querySelector('#importPickerModal .share-tab'));
+  renderSavedFeeds2();
 }
+function switchImportTab(tab, btn){
+  if(!btn) btn = document.querySelector('#importPickerModal .share-tab');
+  document.querySelectorAll('#importPickerModal .share-tab').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('#importPickerModal .share-panel').forEach(p=>p.classList.remove('active'));
+  const id = 'importTab' + tab.charAt(0).toUpperCase() + tab.slice(1);
+  const el = document.getElementById(id); if(el) el.classList.add('active');
+  if(tab !== 'online') stopQrScanner();
+}
+function doImportCode(){
+  const code = document.getElementById('importCodeInput').value.trim();
+  const cd = decodeCD(code);
+  const st = document.getElementById('importStatus');
+  if(!cd||!cd.date||!cd.name){ st.style.color='#e07070'; st.textContent='Ungültiger Code.'; return; }
+  countdowns.unshift(cd); saveCd(); saveCdWithSync(cd); renderList();
+  st.style.color='var(--green)'; st.textContent='✓ Importiert!';
+  setTimeout(()=>{ document.getElementById('importPickerModal').classList.remove('open'); selectCountdown(cd.id); },700);
+}
+
+// ── ICS in picker ──
+function renderSavedFeeds2(){
+  const wrap = document.getElementById('savedFeedsWrap2'); if(!wrap) return;
+  if(!icsFeeds||!icsFeeds.length){ wrap.innerHTML=''; return; }
+  wrap.innerHTML = '<div style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--tm);margin-bottom:5px">Gespeicherte Feeds</div>' +
+    icsFeeds.map((f,i)=>`<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+      <div style="flex:1;font-size:11px;color:var(--td);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${f.name||f.url}</div>
+      <button class="btn-secondary" style="font-size:10px;padding:4px 8px;flex-shrink:0" onclick="loadFeed2(${i})">Laden</button>
+    </div>`).join('');
+}
+function loadFeed2(i){ const f=icsFeeds[i]; if(!f) return; document.getElementById('gcalUrl2').value=f.url; document.getElementById('gcalName2').value=f.name||''; }
+async function doGcalImport2(){
+  // Open the full gcal modal with the URL pre-filled, or just delegate to openGcalModal
+  const url = document.getElementById('gcalUrl2').value.trim();
+  const name = document.getElementById('gcalName2').value.trim();
+  document.getElementById('importPickerModal').classList.remove('open');
+  openGcalModal();
+  if(url){ document.getElementById('icsUrl').value=url; }
+  if(name){ document.getElementById('icsFeedName').value=name; }
+  if(url){ setTimeout(()=>fetchGcal(),200); }
+}
+
+// ── Live countdown share (per-countdown, bidirectional) ──
+// Map of cdId → unsub function for live listeners
+const _liveListeners = {};
+
+async function shareLive(id){
+  const cd = countdowns.find(c=>c.id===id); if(!cd) return;
+  if(!window.fbShareCountdown){ alert('Firebase nicht verbunden.'); return; }
+  const st = document.getElementById('liveShareStatus');
+  if(st){ st.style.color='var(--tm)'; st.textContent='Wird geteilt…'; }
+  try {
+    await window.fbShareCountdown(cd);
+    // Generate short code from id (last 5 chars uppercased)
+    const shortCode = id.slice(-5).toUpperCase();
+    if(st){ st.style.color='var(--green)'; st.textContent='✓ Live geteilt!'; }
+    // Show code in share modal live tab
+    const codeEl = document.getElementById('liveShareCode');
+    if(codeEl){ codeEl.textContent = shortCode; }
+    const wrapEl = document.getElementById('liveShareCodeWrap');
+    if(wrapEl){ wrapEl.style.display='block'; }
+    // Generate QR for the live code
+    const liveQrBox = document.getElementById('liveQrBox');
+    if(liveQrBox){
+      liveQrBox.innerHTML = '';
+      try {
+        const isDark = settings.theme !== 'light';
+        new QRCode(liveQrBox, { text: shortCode, width:160, height:160,
+          colorDark: isDark?'#f0a882':'#1a0f0a', colorLight: isDark?'#1a0f0c':'#ffffff',
+          correctLevel: QRCode.CorrectLevel.M });
+      } catch(e){}
+    }
+    // Start listening for remote changes
+    if(!_liveListeners[id]){
+      _liveListeners[id] = window.fbListenLiveCd(id, (remoteDocs)=>{
+        if(!remoteDocs.length) return;
+        const remote = remoteDocs[0];
+        const local = countdowns.find(c=>c.id===id);
+        if(!local) return;
+        // Merge remote changes into local (remote wins for name/date/emoji etc.)
+        const remoteTs = remote._ts || 0;
+        const localTs = local._savedTs || 0;
+        if(remoteTs > localTs){
+          Object.assign(local, remote);
+          local._savedTs = remoteTs;
+          saveCd();
+          if(activeCountdownId === id) renderCdDetail(id);
+          renderList();
+        }
+      });
+    }
+    cd._live = true; cd._liveCode = shortCode;
+    saveCdWithSync(cd);
+  } catch(e){ if(st){ st.style.color='#e07070'; st.textContent='Fehler: '+e.message; } }
+}
+
+function stopLiveShare(id){
+  if(_liveListeners[id]){ _liveListeners[id](); delete _liveListeners[id]; }
+  const cd = countdowns.find(c=>c.id===id); if(!cd) return;
+  delete cd._live; delete cd._liveCode;
+  saveCdWithSync(cd);
+  renderCdDetail(id);
+}
+
+// ── Online join (receive live countdown) ──
+const _joinListeners = {};
+async function joinCdRoom(){
+  const raw = document.getElementById('liveCodeInput').value.trim().toUpperCase().replace(/\s/g,'');
+  if(!raw){ return; }
+  const st = document.getElementById('liveJoinStatus');
+  st.style.color = 'var(--tm)'; st.textContent = 'Suche Countdown…';
+  if(!window.fbListenLiveCd){ st.style.color='#e07070'; st.textContent='Firebase nicht verbunden.'; return; }
+  // Find the countdown whose last 5 chars match the code
+  // We listen to 'live-*' rooms — since we don't know the full ID, we try the code as a suffix pattern.
+  // Strategy: scan existing countdowns first, then try a direct listen with code as ID
+  let matchId = null;
+  // Check if any local countdown already has this liveCode
+  const existing = countdowns.find(c => c._liveCode === raw || (c.id && c.id.slice(-5).toUpperCase() === raw));
+  if(existing) matchId = existing.id;
+
+  if(!matchId){
+    // Try to find by listening — we'll need the full id. We store a lookup doc.
+    // Since we use last 5 chars: iterate all local countdowns
+    // If not found locally, we can't resolve without a lookup — show message
+    st.style.color = '#e07070';
+    st.textContent = 'Code nicht gefunden. Bitte vollständigen Code eingeben.';
+    return;
+  }
+
+  // Subscribe live
+  if(_joinListeners[matchId]){ _joinListeners[matchId](); delete _joinListeners[matchId]; }
+  let gotFirst = false;
+  _joinListeners[matchId] = window.fbListenLiveCd(matchId, (remoteDocs)=>{
+    if(!remoteDocs.length) return;
+    const remote = remoteDocs[0];
+    let local = countdowns.find(c=>c.id===matchId);
+    if(!local){
+      local = {...remote, _joinedLive:true};
+      countdowns.unshift(local);
+    } else {
+      Object.assign(local, remote, {_joinedLive:true});
+    }
+    saveCd();
+    renderList();
+    if(!gotFirst){
+      gotFirst = true;
+      st.style.color='var(--green)'; st.textContent='✓ Live verbunden!';
+      setTimeout(()=>{ document.getElementById('importPickerModal').classList.remove('open'); selectCountdown(matchId); },1000);
+    }
+    if(activeCountdownId===matchId) renderCdDetail(matchId);
+  });
+}
+
+// ── QR Scanner ──
+let _qrStream = null, _qrAnimFrame = null;
+function toggleQrScanner(){
+  const wrap = document.getElementById('qrScannerWrap');
+  if(!wrap) return;
+  if(wrap.style.display==='none'||!wrap.style.display){ startQrScanner(); } else { stopQrScanner(); }
+}
+async function startQrScanner(){
+  const wrap=document.getElementById('qrScannerWrap');
+  const video=document.getElementById('qrVideo');
+  const st=document.getElementById('qrScanStatus');
+  if(wrap) wrap.style.display='block';
+  if(st){ st.style.color='var(--tm)'; st.textContent='Kamera wird gestartet…'; }
+  try {
+    _qrStream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
+    video.srcObject = _qrStream;
+    await video.play();
+    _qrAnimFrame = requestAnimationFrame(scanQrFrame);
+  } catch(e){
+    if(st) st.textContent='Kamera nicht verfügbar: '+(e.message||e);
+  }
+}
+function scanQrFrame(){
+  const video=document.getElementById('qrVideo');
+  const canvas=document.getElementById('qrScanCanvas');
+  const st=document.getElementById('qrScanStatus');
+  if(!video||video.readyState<2){ _qrAnimFrame=requestAnimationFrame(scanQrFrame); return; }
+  canvas.width=video.videoWidth; canvas.height=video.videoHeight;
+  const ctx=canvas.getContext('2d');
+  ctx.drawImage(video,0,0,canvas.width,canvas.height);
+  const imgData=ctx.getImageData(0,0,canvas.width,canvas.height);
+  const code = window.jsQR && window.jsQR(imgData.data,imgData.width,imgData.height,{inversionAttempts:'dontInvert'});
+  if(code&&code.data){
+    stopQrScanner();
+    if(st){ st.style.color='var(--green)'; st.textContent='✓ QR-Code erkannt!'; }
+    const input=document.getElementById('liveCodeInput');
+    const scanned=code.data.replace(/^live-/i,'').slice(-5).toUpperCase();
+    if(input) input.value=scanned;
+    joinCdRoom();
+    return;
+  }
+  _qrAnimFrame=requestAnimationFrame(scanQrFrame);
+}
+function stopQrScanner(){
+  if(_qrAnimFrame){ cancelAnimationFrame(_qrAnimFrame); _qrAnimFrame=null; }
+  if(_qrStream){ _qrStream.getTracks().forEach(t=>t.stop()); _qrStream=null; }
+  const wrap=document.getElementById('qrScannerWrap');
+  if(wrap) wrap.style.display='none';
+  const video=document.getElementById('qrVideo');
+  if(video) video.srcObject=null;
+}
+
 
 // ═══════════════ THEME ═══════════════
 function setTheme(theme){
@@ -1874,26 +2221,22 @@ function renderCdDetail(id){
   // totalCounted = all matching days from startAnchor→target (denominator for %)
 
   // ── PROGRESS % ──
-  // Use cd.start if set; else use cd.created date; else fall back to 30 days before target.
+  // Simple, correct: (calendar days elapsed from anchor) / (total calendar days from anchor to target)
   let startAnchor;
   if(cd.start){
-    startAnchor = cd.start;
+    startAnchor = new Date(cd.start+'T00:00:00');
   } else if(cd.created){
-    // created might be today → subtract 1 day so elapsed can be > 0 on day 1
     const c = new Date(cd.created); c.setHours(0,0,0,0);
-    const t2 = new Date(); t2.setHours(0,0,0,0);
-    if(c >= t2) { c.setDate(c.getDate()-1); } // push back so today counts as day 1
-    startAnchor = ds(c);
+    startAnchor = c;
   } else {
-    const fallback = new Date(cd.date+'T00:00:00'); fallback.setDate(fallback.getDate()-30);
-    startAnchor = ds(fallback);
+    startAnchor = new Date(); startAnchor.setHours(0,0,0,0); startAnchor.setDate(startAnchor.getDate()-30);
   }
+  const today0 = new Date(); today0.setHours(0,0,0,0);
+  const target0 = new Date(cd.date+'T00:00:00'); target0.setHours(0,0,0,0);
+  const totalMs = target0 - startAnchor;
+  const elapsedMs = today0 - startAnchor;
+  const pct = totalMs <= 0 ? (isPast ? 100 : 0) : isPast ? 100 : Math.min(100, Math.max(0, Math.round(elapsedMs / totalMs * 100)));
 
-  // total counted days in the whole range (start→target)
-  const totalCounted = countDays(cd.date, cd.mode, cd.wdays, cd.exclude, cd.include, startAnchor).count;
-  const elapsed = isPast ? totalCounted : countElapsed(cd.mode, cd.wdays, cd.exclude, cd.include, startAnchor);
-  const totalForPct = totalCounted > 0 ? totalCounted : 1;
-  const pct = isPast ? 100 : Math.min(100, Math.round(elapsed / totalForPct * 100));
 
   const tMs=targetMs(cd);
   const nextDay=(!isPast&&cd.mode!=='all')?nextCounted(cd):null;
@@ -1914,9 +2257,9 @@ function renderCdDetail(id){
     return `<div class="counter-number">${count}</div><div class="counter-unit">${count===1?'Tag':'Tage'} verbleibend</div>`;
   }
 
-  const roomBtn = currentRoom
-    ? '<button class="edit-btn" onclick="addToRoom(\''+cd.id+'\')">👥 Raum hinzufügen</button>'
-    : '<button class="edit-btn" onclick="openRoomModal()">👥 Raum</button>';
+  const roomBtn = cd._live
+    ? '<button class="edit-btn" style="color:var(--green)" onclick="openShareModal(\''+cd.id+'\');switchShareTab(\'live\',document.querySelector(\'.share-tab:last-child\'))">🔴 Live aktiv</button>'
+    : '<button class="edit-btn" onclick="openShareModal(\''+cd.id+'\');switchShareTab(\'live\',document.querySelector(\'.share-tab:last-child\'))">↑ Teilen</button>';
   const excNote = cd.exclude?.length ? ' · '+cd.exclude.length+' Ausschlüsse' : '';
   const incNote = cd.include?.length ? ' · '+cd.include.length+' Einschlüsse' : '';
   document.getElementById('mainContent').innerHTML=`
@@ -1929,7 +2272,6 @@ function renderCdDetail(id){
       </div>
       <div class="header-actions">
         ${roomBtn}
-        <button class="share-btn" onclick="openShareModal('${cd.id}')">↑ Export</button>
         <button class="edit-btn" onclick="openModal('${cd.id}')">✎ Bearbeiten</button>
       </div>
     </div>
@@ -2065,10 +2407,11 @@ function switchTab(tab,btn){
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active')); btn.classList.add('active');
   document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));
   document.getElementById('tab-'+tab).classList.add('active');
-  document.getElementById('newBtn').textContent=tab==='countdowns'?'+ Countdown':'+ Tracker';
-  document.getElementById('newBtn').onclick=handleNewBtn;
-  const icsBtn=document.querySelectorAll('.icon-btn');
-  icsBtn.forEach(b=>b.style.display='flex');
+  const newBtnEl = document.getElementById('newBtn');
+  if(newBtnEl){
+    newBtnEl.textContent = tab === 'tracker' ? '+ Tracker' : '+ Countdown';
+    newBtnEl.onclick = handleNewBtn;
+  }
   if(tab==='tracker'&&!activeTrackerId) showTrWelcome();
   if(tab==='countdowns'&&!activeCountdownId) showCdWelcome();
 }
@@ -2342,7 +2685,7 @@ async function importSelected(){
 })();
 
 // ═══════════════ OVERLAY CLOSE ═══════════════
-['modalOverlay','trackerModal','shareModal','importModal','settingsModal','gcalOverlay','roomModal'].forEach(id=>{
+['modalOverlay','trackerModal','shareModal','importModal','importPickerModal','settingsModal','gcalOverlay','roomModal'].forEach(id=>{
   const el = document.getElementById(id);
   if(el) el.addEventListener('click',function(e){if(e.target===this)this.classList.remove('open');});
 });
