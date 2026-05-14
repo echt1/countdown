@@ -120,28 +120,51 @@ window.fbAddToRoom = async (roomId, cd) => {
   await setDoc(doc(db, 'rooms', roomId, 'countdowns', cd.id), {...cleanCd, _ts: serverTimestamp()});
 };
 
-// Per-countdown bidirectional live share
-window.fbShareCountdown = async (cd) => {
-  const roomId = 'live-' + cd.id;
-  await setDoc(doc(db, 'rooms', roomId), {cdId: cd.id, created: serverTimestamp(), type:'cd-live'});
-  const cleanCd = {...cd}; delete cleanCd._ts;
-  await setDoc(doc(db, 'rooms', roomId, 'countdowns', cd.id), {...cleanCd, _ts: serverTimestamp()});
-  return roomId;
-};
+// ── Per-countdown Online Sync (bidirectional) ──────────────────
+// Architecture: rooms/{roomCode} = {cdSnapshot, updatedAt}
+// Room code is a short 6-char alphanumeric stored on the countdown as cd._roomCode
 
-window.fbUpdateLiveCd = async (cd) => {
-  const roomId = 'live-' + cd.id;
-  const cleanCd = {...cd}; delete cleanCd._ts;
-  await setDoc(doc(db, 'rooms', roomId, 'countdowns', cd.id), {...cleanCd, _ts: serverTimestamp()});
-};
+function _genRoomCode(){
+  const chars='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let s=''; for(let i=0;i<6;i++) s+=chars[Math.floor(Math.random()*chars.length)]; return s;
+}
 
-window.fbListenLiveCd = (cdId, callback) => {
-  const roomId = 'live-' + cdId;
-  const col = collection(db, 'rooms', roomId, 'countdowns');
-  return onSnapshot(col, snap => {
-    const docs = snap.docs.map(d => { const x={...d.data()}; delete x._ts; return x; });
-    callback(docs);
+window.fbStartLive = async (cd) => {
+  // Create or reuse room code
+  const roomCode = cd._roomCode || _genRoomCode();
+  const cleanCd = {...cd}; delete cleanCd._ts; delete cleanCd._savedTs;
+  await setDoc(doc(db, 'rooms', roomCode), {
+    ...cleanCd,
+    _roomCode: roomCode,
+    _ts: serverTimestamp()
   });
+  return roomCode;
+};
+
+window.fbUpdateLive = async (cd) => {
+  if(!cd._roomCode) return;
+  const cleanCd = {...cd}; delete cleanCd._ts; delete cleanCd._savedTs;
+  await setDoc(doc(db, 'rooms', cd._roomCode), {
+    ...cleanCd,
+    _roomCode: cd._roomCode,
+    _ts: serverTimestamp()
+  });
+};
+
+window.fbListenLive = (roomCode, callback) => {
+  return onSnapshot(doc(db, 'rooms', roomCode), (snap) => {
+    if(snap.exists()){
+      const data = {...snap.data()};
+      // Pass server timestamp as JS timestamp for conflict resolution
+      if(data._ts && data._ts.toMillis) data._ts = data._ts.toMillis();
+      callback(data);
+    }
+  });
+};
+
+window.fbStopLive = async (roomCode) => {
+  // Don't delete — just let it persist so others can still read
+  // Optionally mark as inactive
 };
 
 </script>
@@ -781,7 +804,7 @@ canvas#shareCardCanvas{border-radius:12px;max-width:100%;}
       <button class="share-tab" onclick="switchShareTab('qr',this)">QR-Code</button>
       <button class="share-tab" onclick="switchShareTab('card',this)">🎨 Card</button>
       <button class="share-tab" onclick="switchShareTab('embed',this)">🔗 Einbetten</button>
-      <button class="share-tab" onclick="switchShareTab('live',this)">🔴 Live</button>
+      <button class="share-tab" onclick="switchShareTab('live',this)">🌐 Online</button>
     </div>
     <!-- Code panel -->
     <div class="share-panel active" id="sharePanelCode">
@@ -815,21 +838,21 @@ canvas#shareCardCanvas{border-radius:12px;max-width:100%;}
       <div class="share-code-box" id="embedCodeBox" onclick="selectEmbedCode()" style="font-size:10px;line-height:1.5"></div>
       <button class="copy-btn" id="embedCopyBtn" onclick="copyEmbedCode()">📋 Code kopieren</button>
     </div>
-    <!-- Live panel -->
+    <!-- Online panel -->
     <div class="share-panel" id="sharePanelLive">
-      <div class="modal-sub" style="margin-top:0">Teile diesen Countdown live — Änderungen beider Seiten werden sofort synchronisiert.</div>
+      <div class="modal-sub" style="margin-top:0">Teile diesen Countdown live — Änderungen werden sofort auf beiden Seiten synchronisiert.</div>
       <div id="liveShareCodeWrap" style="display:none;margin-bottom:14px">
         <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px 16px;text-align:center">
-          <div style="font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--tm);margin-bottom:8px">Live-Code</div>
+          <div style="font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--tm);margin-bottom:8px">Online-Code</div>
           <div id="liveShareCode" style="font-size:28px;font-weight:800;letter-spacing:6px;color:var(--accent)"></div>
-          <div style="font-size:11px;color:var(--tm);margin-top:6px">Anderen geben diesen Code im "↓ Import → Online"-Tab ein</div>
+          <div style="font-size:11px;color:var(--tm);margin-top:6px">↓ Import → Online → diesen Code eingeben oder QR scannen</div>
         </div>
         <div id="liveQrBox" style="display:flex;justify-content:center;margin-top:12px"></div>
         <button class="copy-btn" style="margin-top:8px" onclick="copyLiveCode()">📋 Code kopieren</button>
-        <button class="btn-secondary" style="width:100%;font-size:11px;margin-top:6px" id="stopLiveBtn" onclick="stopLiveShareCurrent()">Live-Sync stoppen</button>
+        <button class="btn-secondary" style="width:100%;font-size:11px;margin-top:6px" id="stopLiveBtn" onclick="stopLiveShareCurrent()">Online-Sync stoppen</button>
       </div>
       <div id="liveShareStatus" style="font-size:11px;min-height:14px;margin-bottom:12px"></div>
-      <button class="btn-primary" style="width:100%" id="startLiveBtn" onclick="shareLiveCurrent()">🔴 Live-Sync starten</button>
+      <button class="btn-primary" style="width:100%" id="startLiveBtn" onclick="shareLiveCurrent()">🌐 Online-Sync starten</button>
     </div>
     <div class="form-actions" style="margin-top:12px">
       <button class="btn-secondary" onclick="document.getElementById('shareModal').classList.remove('open')">Schließen</button>
@@ -1436,6 +1459,7 @@ async function signOutConfirm() {
 function saveCdWithSync(cd) {
   saveCd();
   if (window.fbUser && window.fbSaveCountdown) window.fbSaveCountdown(window.fbUser.uid, cd);
+  pushLiveUpdate(cd); // push to live room if active
 }
 function deleteCdWithSync(id) {
   saveCd();
@@ -1543,37 +1567,46 @@ function openShareModal(id){
       colorLight: isDark?'#1a0f0c':'#ffffff',
       correctLevel:QRCode.CorrectLevel.M});
   }catch(e){ qrBox.innerHTML='<div style="font-size:11px;color:var(--tm);padding:16px">QR-Bibliothek nicht geladen.</div>'; }
-  // Init live tab state
+  // Init live/online tab state
   const liveWrap = document.getElementById('liveShareCodeWrap');
   const liveSt = document.getElementById('liveShareStatus');
   const startBtn = document.getElementById('startLiveBtn');
-  if(liveWrap && liveSt && startBtn){
-    if(cd._live && cd._liveCode){
+  if(liveWrap && startBtn){
+    if(cd._live && cd._roomCode){
       liveWrap.style.display='block';
-      document.getElementById('liveShareCode').textContent = cd._liveCode;
+      document.getElementById('liveShareCode').textContent = cd._roomCode;
       startBtn.style.display='none';
-      liveSt.textContent='';
-      // Regenerate QR for live code
+      if(liveSt) liveSt.textContent='';
       const liveQrBox=document.getElementById('liveQrBox');
       if(liveQrBox){ liveQrBox.innerHTML='';
         try{ const isDark=settings.theme!=='light';
-          new QRCode(liveQrBox,{text:cd._liveCode,width:160,height:160,
+          new QRCode(liveQrBox,{text:cd._roomCode,width:160,height:160,
             colorDark:isDark?'#f0a882':'#1a0f0a',colorLight:isDark?'#1a0f0c':'#ffffff',correctLevel:QRCode.CorrectLevel.M});
         }catch(e){} }
     } else {
       liveWrap.style.display='none';
       startBtn.style.display='block';
-      liveSt.textContent='';
+      if(liveSt) liveSt.textContent='';
     }
   }
   window._currentShareId = id;
   document.getElementById('shareModal').classList.add('open');
 }
 
-// Called from "🔴 Live-Sync starten" button in share modal
+// Called from "🔴 Online-Sync starten" button in share modal
 function shareLiveCurrent(){ shareLive(window._currentShareId); }
-function stopLiveShareCurrent(){ stopLiveShare(window._currentShareId); const liveWrap=document.getElementById('liveShareCodeWrap'); if(liveWrap) liveWrap.style.display='none'; const startBtn=document.getElementById('startLiveBtn'); if(startBtn) startBtn.style.display='block'; }
-function copyLiveCode(){ const code=document.getElementById('liveShareCode').textContent; if(!code) return; if(navigator.clipboard) navigator.clipboard.writeText(code); else { const ta=document.createElement('textarea');ta.value=code;document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta); } }
+function stopLiveShareCurrent(){
+  stopLiveShare(window._currentShareId);
+  const liveWrap=document.getElementById('liveShareCodeWrap'); if(liveWrap) liveWrap.style.display='none';
+  const startBtn=document.getElementById('startLiveBtn'); if(startBtn) startBtn.style.display='block';
+  showLiveSt('','info');
+}
+function copyLiveCode(){
+  const code=document.getElementById('liveShareCode').textContent; if(!code) return;
+  if(navigator.clipboard) navigator.clipboard.writeText(code);
+  else { const ta=document.createElement('textarea');ta.value=code;document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta); }
+  const btn=event.target; const orig=btn.textContent; btn.textContent='✓ Kopiert!'; setTimeout(()=>btn.textContent=orig,1500);
+}
 
 
 let currentShareCd = null;
@@ -1664,168 +1697,211 @@ async function doGcalImport2(){
   if(url){ setTimeout(()=>fetchGcal(),200); }
 }
 
-// ── Live countdown share (per-countdown, bidirectional) ──
-// Map of cdId → unsub function for live listeners
-const _liveListeners = {};
+// ── Online Sync (bidirectional, room-code based) ──
+const _liveListeners = {}; // cdId → unsubscribe fn
+let _ignoreRemoteUntil = {}; // cdId → timestamp, suppress echoes
 
 async function shareLive(id){
   const cd = countdowns.find(c=>c.id===id); if(!cd) return;
-  if(!window.fbShareCountdown){ alert('Firebase nicht verbunden.'); return; }
-  const st = document.getElementById('liveShareStatus');
-  if(st){ st.style.color='var(--tm)'; st.textContent='Wird geteilt…'; }
+  if(!window.fbStartLive){ showLiveSt('Firebase nicht verbunden.','err'); return; }
+  if(!window.fbUser){ showLiveSt('Bitte zuerst anmelden.','err'); return; }
+  showLiveSt('Wird geteilt…','info');
   try {
-    await window.fbShareCountdown(cd);
-    // Generate short code from id (last 5 chars uppercased)
-    const shortCode = id.slice(-5).toUpperCase();
-    if(st){ st.style.color='var(--green)'; st.textContent='✓ Live geteilt!'; }
-    // Show code in share modal live tab
-    const codeEl = document.getElementById('liveShareCode');
-    if(codeEl){ codeEl.textContent = shortCode; }
-    const wrapEl = document.getElementById('liveShareCodeWrap');
-    if(wrapEl){ wrapEl.style.display='block'; }
-    // Generate QR for the live code
-    const liveQrBox = document.getElementById('liveQrBox');
-    if(liveQrBox){
-      liveQrBox.innerHTML = '';
-      try {
-        const isDark = settings.theme !== 'light';
-        new QRCode(liveQrBox, { text: shortCode, width:160, height:160,
-          colorDark: isDark?'#f0a882':'#1a0f0a', colorLight: isDark?'#1a0f0c':'#ffffff',
-          correctLevel: QRCode.CorrectLevel.M });
-      } catch(e){}
-    }
-    // Start listening for remote changes
-    if(!_liveListeners[id]){
-      _liveListeners[id] = window.fbListenLiveCd(id, (remoteDocs)=>{
-        if(!remoteDocs.length) return;
-        const remote = remoteDocs[0];
-        const local = countdowns.find(c=>c.id===id);
-        if(!local) return;
-        // Merge remote changes into local (remote wins for name/date/emoji etc.)
-        const remoteTs = remote._ts || 0;
-        const localTs = local._savedTs || 0;
-        if(remoteTs > localTs){
-          Object.assign(local, remote);
-          local._savedTs = remoteTs;
-          saveCd();
-          if(activeCountdownId === id) renderCdDetail(id);
-          renderList();
-        }
-      });
-    }
-    cd._live = true; cd._liveCode = shortCode;
+    const roomCode = await window.fbStartLive(cd);
+    cd._roomCode = roomCode; cd._live = true;
     saveCdWithSync(cd);
-  } catch(e){ if(st){ st.style.color='#e07070'; st.textContent='Fehler: '+e.message; } }
+    // Start listening for remote edits
+    _startLiveListener(id, roomCode);
+    showLiveSt('✓ Online geteilt!','ok');
+    // Update modal UI
+    _updateLiveModalUI(id);
+  } catch(e){ showLiveSt('Fehler: '+e.message,'err'); }
+}
+
+function _startLiveListener(cdId, roomCode){
+  if(_liveListeners[cdId]){ _liveListeners[cdId](); delete _liveListeners[cdId]; }
+  _liveListeners[cdId] = window.fbListenLive(roomCode, (remote) => {
+    const ignoreUntil = _ignoreRemoteUntil[cdId] || 0;
+    const remoteTs = remote._ts || 0;
+    if(remoteTs <= ignoreUntil) return; // echo suppression
+    const local = countdowns.find(c=>c.id===cdId);
+    if(!local) return;
+    const localTs = local._savedTs || 0;
+    if(remoteTs > localTs){
+      const keepFields = {id:local.id, _roomCode:local._roomCode, _live:local._live, _savedTs:remoteTs, _joinedLive:local._joinedLive};
+      Object.assign(local, remote, keepFields);
+      saveCd();
+      if(activeCountdownId===cdId) renderCdDetail(cdId);
+      renderList();
+    }
+  });
 }
 
 function stopLiveShare(id){
   if(_liveListeners[id]){ _liveListeners[id](); delete _liveListeners[id]; }
   const cd = countdowns.find(c=>c.id===id); if(!cd) return;
-  delete cd._live; delete cd._liveCode;
+  delete cd._live; delete cd._roomCode; delete cd._savedTs;
   saveCdWithSync(cd);
   renderCdDetail(id);
 }
 
-// ── Online join (receive live countdown) ──
+function showLiveSt(msg, type){
+  const el = document.getElementById('liveShareStatus'); if(!el) return;
+  el.style.color = type==='ok'?'var(--green)':type==='err'?'#e07070':'var(--tm)';
+  el.textContent = msg;
+}
+
+function _updateLiveModalUI(id){
+  const cd = countdowns.find(c=>c.id===id); if(!cd) return;
+  const wrap = document.getElementById('liveShareCodeWrap');
+  const startBtn = document.getElementById('startLiveBtn');
+  if(cd._live && cd._roomCode){
+    if(wrap) wrap.style.display='block';
+    if(startBtn) startBtn.style.display='none';
+    const codeEl = document.getElementById('liveShareCode');
+    if(codeEl) codeEl.textContent = cd._roomCode;
+    // QR for room code
+    const liveQrBox = document.getElementById('liveQrBox');
+    if(liveQrBox){
+      liveQrBox.innerHTML='';
+      try {
+        const isDark = settings.theme!=='light';
+        new QRCode(liveQrBox,{text:cd._roomCode,width:160,height:160,
+          colorDark:isDark?'#f0a882':'#1a0f0a',colorLight:isDark?'#1a0f0c':'#ffffff',
+          correctLevel:QRCode.CorrectLevel.M});
+      } catch(e){}
+    }
+  } else {
+    if(wrap) wrap.style.display='none';
+    if(startBtn) startBtn.style.display='block';
+  }
+}
+
+// When a live countdown is saved locally, push to Firebase
+function pushLiveUpdate(cd){
+  if(!cd._live || !cd._roomCode || !window.fbUpdateLive) return;
+  const now = Date.now();
+  _ignoreRemoteUntil[cd.id] = now + 3000; // ignore echoes for 3s
+  cd._savedTs = now;
+  window.fbUpdateLive(cd).catch(e=>console.warn('Live sync error:',e));
+}
+
+// ── Online Join ──
 const _joinListeners = {};
 async function joinCdRoom(){
-  const raw = document.getElementById('liveCodeInput').value.trim().toUpperCase().replace(/\s/g,'');
-  if(!raw){ return; }
+  const raw = document.getElementById('liveCodeInput').value.trim().toUpperCase().replace(/[^A-Z0-9]/g,'');
+  if(!raw || raw.length < 4){ return; }
   const st = document.getElementById('liveJoinStatus');
-  st.style.color = 'var(--tm)'; st.textContent = 'Suche Countdown…';
-  if(!window.fbListenLiveCd){ st.style.color='#e07070'; st.textContent='Firebase nicht verbunden.'; return; }
-  // Find the countdown whose last 5 chars match the code
-  // We listen to 'live-*' rooms — since we don't know the full ID, we try the code as a suffix pattern.
-  // Strategy: scan existing countdowns first, then try a direct listen with code as ID
-  let matchId = null;
-  // Check if any local countdown already has this liveCode
-  const existing = countdowns.find(c => c._liveCode === raw || (c.id && c.id.slice(-5).toUpperCase() === raw));
-  if(existing) matchId = existing.id;
+  st.style.color='var(--tm)'; st.textContent='Verbinde…';
+  if(!window.fbListenLive){ st.style.color='#e07070'; st.textContent='Firebase nicht verbunden.'; return; }
+  if(!window.fbUser){ st.style.color='#e07070'; st.textContent='Bitte zuerst anmelden.'; return; }
 
-  if(!matchId){
-    // Try to find by listening — we'll need the full id. We store a lookup doc.
-    // Since we use last 5 chars: iterate all local countdowns
-    // If not found locally, we can't resolve without a lookup — show message
-    st.style.color = '#e07070';
-    st.textContent = 'Code nicht gefunden. Bitte vollständigen Code eingeben.';
-    return;
-  }
-
-  // Subscribe live
-  if(_joinListeners[matchId]){ _joinListeners[matchId](); delete _joinListeners[matchId]; }
   let gotFirst = false;
-  _joinListeners[matchId] = window.fbListenLiveCd(matchId, (remoteDocs)=>{
-    if(!remoteDocs.length) return;
-    const remote = remoteDocs[0];
-    let local = countdowns.find(c=>c.id===matchId);
-    if(!local){
-      local = {...remote, _joinedLive:true};
-      countdowns.unshift(local);
+  const roomCode = raw;
+
+  // Timeout if nothing arrives
+  const timeout = setTimeout(()=>{
+    if(!gotFirst){
+      if(_joinListeners[roomCode]){ _joinListeners[roomCode](); delete _joinListeners[roomCode]; }
+      st.style.color='#e07070'; st.textContent='Code nicht gefunden.';
+    }
+  }, 5000);
+
+  if(_joinListeners[roomCode]){ _joinListeners[roomCode](); delete _joinListeners[roomCode]; }
+  _joinListeners[roomCode] = window.fbListenLive(roomCode, (remote) => {
+    clearTimeout(timeout);
+    if(!remote || !remote.id || !remote.date){ return; }
+
+    const existingIdx = countdowns.findIndex(c=>c.id===remote.id || c._roomCode===roomCode);
+    let local;
+    if(existingIdx>=0){
+      local = countdowns[existingIdx];
+      const keepFields = {_roomCode:roomCode, _live:true, _joinedLive:true, _savedTs: remote._ts||Date.now()};
+      Object.assign(local, remote, keepFields);
     } else {
-      Object.assign(local, remote, {_joinedLive:true});
+      local = {...remote, _roomCode:roomCode, _live:true, _joinedLive:true, _savedTs: remote._ts||Date.now()};
+      countdowns.unshift(local);
     }
     saveCd();
     renderList();
+    // Start live listener for this countdown
+    _startLiveListener(local.id, roomCode);
     if(!gotFirst){
-      gotFirst = true;
-      st.style.color='var(--green)'; st.textContent='✓ Live verbunden!';
-      setTimeout(()=>{ document.getElementById('importPickerModal').classList.remove('open'); selectCountdown(matchId); },1000);
+      gotFirst=true;
+      st.style.color='var(--green)'; st.textContent='✓ Verbunden!';
+      setTimeout(()=>{ document.getElementById('importPickerModal').classList.remove('open'); selectCountdown(local.id); },800);
     }
-    if(activeCountdownId===matchId) renderCdDetail(matchId);
+    if(activeCountdownId===local.id) renderCdDetail(local.id);
   });
 }
 
 // ── QR Scanner ──
-let _qrStream = null, _qrAnimFrame = null;
+let _qrStream = null, _qrAnimFrame = null, _qrLastScan = 0;
 function toggleQrScanner(){
-  const wrap = document.getElementById('qrScannerWrap');
-  if(!wrap) return;
-  if(wrap.style.display==='none'||!wrap.style.display){ startQrScanner(); } else { stopQrScanner(); }
+  const wrap = document.getElementById('qrScannerWrap'); if(!wrap) return;
+  if(wrap.style.display==='none'||wrap.style.display===''){ startQrScanner(); } else { stopQrScanner(); }
 }
 async function startQrScanner(){
   const wrap=document.getElementById('qrScannerWrap');
   const video=document.getElementById('qrVideo');
   const st=document.getElementById('qrScanStatus');
-  if(wrap) wrap.style.display='block';
+  if(wrap){ wrap.style.display='block'; }
   if(st){ st.style.color='var(--tm)'; st.textContent='Kamera wird gestartet…'; }
   try {
-    _qrStream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
+    _qrStream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1280},height:{ideal:720}}});
     video.srcObject = _qrStream;
-    await video.play();
-    _qrAnimFrame = requestAnimationFrame(scanQrFrame);
+    video.onloadedmetadata = () => {
+      video.play().then(()=>{
+        if(st) st.textContent='Kamera läuft — QR-Code in Sichtfeld halten';
+        _qrLastScan = 0;
+        cancelAnimationFrame(_qrAnimFrame);
+        _qrAnimFrame = requestAnimationFrame(scanQrFrame);
+      });
+    };
   } catch(e){
-    if(st) st.textContent='Kamera nicht verfügbar: '+(e.message||e);
+    if(st){ st.style.color='#e07070'; st.textContent='Kamera nicht verfügbar: '+(e.name||e.message); }
+    if(wrap) wrap.style.display='none';
   }
 }
 function scanQrFrame(){
   const video=document.getElementById('qrVideo');
   const canvas=document.getElementById('qrScanCanvas');
   const st=document.getElementById('qrScanStatus');
-  if(!video||video.readyState<2){ _qrAnimFrame=requestAnimationFrame(scanQrFrame); return; }
+  if(!video||!canvas||video.readyState<2||video.paused){
+    _qrAnimFrame=requestAnimationFrame(scanQrFrame); return;
+  }
+  // Throttle to ~10fps to reduce CPU
+  const now=performance.now();
+  if(now-_qrLastScan < 100){ _qrAnimFrame=requestAnimationFrame(scanQrFrame); return; }
+  _qrLastScan=now;
+
   canvas.width=video.videoWidth; canvas.height=video.videoHeight;
   const ctx=canvas.getContext('2d');
   ctx.drawImage(video,0,0,canvas.width,canvas.height);
   const imgData=ctx.getImageData(0,0,canvas.width,canvas.height);
-  const code = window.jsQR && window.jsQR(imgData.data,imgData.width,imgData.height,{inversionAttempts:'dontInvert'});
-  if(code&&code.data){
+  if(!window.jsQR){ _qrAnimFrame=requestAnimationFrame(scanQrFrame); return; }
+  const result=window.jsQR(imgData.data,imgData.width,imgData.height,{inversionAttempts:'attemptBoth'});
+  if(result&&result.data){
     stopQrScanner();
     if(st){ st.style.color='var(--green)'; st.textContent='✓ QR-Code erkannt!'; }
     const input=document.getElementById('liveCodeInput');
-    const scanned=code.data.replace(/^live-/i,'').slice(-5).toUpperCase();
+    // Room codes are 6 alphanum chars — extract from QR data
+    const scanned = result.data.trim().toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,6);
     if(input) input.value=scanned;
-    joinCdRoom();
+    setTimeout(joinCdRoom, 100);
     return;
   }
   _qrAnimFrame=requestAnimationFrame(scanQrFrame);
 }
 function stopQrScanner(){
-  if(_qrAnimFrame){ cancelAnimationFrame(_qrAnimFrame); _qrAnimFrame=null; }
+  cancelAnimationFrame(_qrAnimFrame); _qrAnimFrame=null;
   if(_qrStream){ _qrStream.getTracks().forEach(t=>t.stop()); _qrStream=null; }
   const wrap=document.getElementById('qrScannerWrap');
   if(wrap) wrap.style.display='none';
   const video=document.getElementById('qrVideo');
-  if(video) video.srcObject=null;
+  if(video){ video.srcObject=null; }
 }
+
 
 
 // ═══════════════ THEME ═══════════════
@@ -2258,8 +2334,8 @@ function renderCdDetail(id){
   }
 
   const roomBtn = cd._live
-    ? '<button class="edit-btn" style="color:var(--green)" onclick="openShareModal(\''+cd.id+'\');switchShareTab(\'live\',document.querySelector(\'.share-tab:last-child\'))">🔴 Live aktiv</button>'
-    : '<button class="edit-btn" onclick="openShareModal(\''+cd.id+'\');switchShareTab(\'live\',document.querySelector(\'.share-tab:last-child\'))">↑ Teilen</button>';
+    ? '<button class="edit-btn" style="color:var(--green)" onclick="openShareModal(\''+cd.id+'\');setTimeout(()=>switchShareTab(\'live\',document.querySelector(\'.share-tab:last-child\')),50)">🌐 Online</button>'
+    : '<button class="edit-btn" onclick="openShareModal(\''+cd.id+'\')">↑ Teilen</button>';
   const excNote = cd.exclude?.length ? ' · '+cd.exclude.length+' Ausschlüsse' : '';
   const incNote = cd.include?.length ? ' · '+cd.include.length+' Einschlüsse' : '';
   document.getElementById('mainContent').innerHTML=`
@@ -2771,15 +2847,17 @@ function drawShareCard(cd) {
     roundRect(ctx,barX,barY,Math.max(barR*2, barW*pct),barH,barR); ctx.fill();
   }
 
-  // Mode tag
+  // Mode tag + total days
   ctx.font = '600 11px "Plus Jakarta Sans", sans-serif';
   ctx.fillStyle = isLight ? '#8a7060' : '#7a5a52';
-  ctx.fillText(fmtMode(cd.mode, cd.wdays), 36, 290);
+  const modeLabel = fmtMode(cd.mode, cd.wdays);
+  const totalDays = countDays(cd.date,'all',null,[],[],null).count;
+  ctx.fillText(modeLabel + ' · ' + totalDays + ' Kalendertage', 36, 290);
 
   // Bottom watermark
   ctx.font = '500 11px "Plus Jakarta Sans", sans-serif';
   ctx.fillStyle = isLight ? '#c0b0a0' : '#3d2018';
-  ctx.fillText('countdownstudio.app', W-180, H-20);
+  ctx.fillText('tinyurl.com/countdownstudio', W-210, H-20);
 }
 
 function roundRect(ctx,x,y,w,h,r){
@@ -3210,6 +3288,8 @@ applyTheme();
 applyBranding();
 renderList();
 if(currentRoom) subscribeRoom(currentRoom.code);
+// Re-attach live listeners for any live countdowns
+countdowns.filter(c=>c._live&&c._roomCode).forEach(c=>_startLiveListener(c.id,c._roomCode));
 renderTrackerList();
 if(countdowns.length) selectCountdown(countdowns[0].id);
 </script>
