@@ -1016,7 +1016,7 @@ canvas#shareCardCanvas{border-radius:12px;max-width:100%;height:auto;display:blo
     <div class="settings-section" style="margin-top:14px">
       <div class="settings-section-title">Über</div>
       <div style="font-size:12px;color:var(--tm);line-height:1.8;margin-bottom:10px">Version 0.9 · Gebaut mit ❤️</div>
-      <button class="btn-secondary" style="width:100%;font-size:12px" onclick="document.getElementById('settingsModal').classList.remove('open');setTimeout(showChangelogForced,100)">📰 News & Changelog anzeigen</button>
+      <button class="btn-secondary" id="newsBtn" style="width:100%;font-size:12px;display:none" onclick="document.getElementById('settingsModal').classList.remove('open');setTimeout(showChangelogForced,100)">📰 News & Changelog anzeigen</button>
     </div>
     <div class="form-actions"><button class="btn-primary" onclick="document.getElementById('settingsModal').classList.remove('open')">Fertig</button></div>
   </div>
@@ -3328,7 +3328,9 @@ setInterval(()=>{renderList();renderTrackerList();},60000);
 function checkChangelog(){
   if(!window.fbCheckChangelog) return;
   window.fbCheckChangelog((data)=>{
-    if(!data || !data.version) return;
+    if(!data || data.visible === false){ _updateNewsBtn(false); return; }
+    _updateNewsBtn(true);
+    if(!data.version) return;
     const seen = localStorage.getItem('cs4_changelog_seen') || '0';
     if(String(data.version) <= String(seen)) return;
     _showChangelogPopup(data);
@@ -3337,9 +3339,15 @@ function checkChangelog(){
 function showChangelogForced(){
   if(!window.fbCheckChangelog){ return; }
   window.fbCheckChangelog((data)=>{
-    if(!data) return;
+    if(!data || data.visible === false) return;
     _showChangelogPopup(data);
   });
+}
+
+// Update settings news button visibility based on Firebase
+function _updateNewsBtn(visible){
+  const btn = document.getElementById('newsBtn');
+  if(btn) btn.style.display = visible ? '' : 'none';
 }
 function _showChangelogPopup(data){
   document.getElementById('changelogTitle').textContent = data.title || 'Was ist neu';
