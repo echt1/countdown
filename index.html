@@ -1479,7 +1479,7 @@ function openShareModal(id){
     new QRCode(qrBox,{text:code,width:200,height:200,
       colorDark: isDark?'#f0a882':'#1a0f0a',
       colorLight: isDark?'#1a0f0c':'#ffffff',
-      correctLevel:QRCode.CorrectLevel.M});
+      correctLevel:QRCode.CorrectLevel.L});
   }catch(e){ qrBox.innerHTML='<div style="font-size:11px;color:var(--tm);padding:16px">QR-Bibliothek nicht geladen.</div>'; }
   // Sync card config to current app theme/accent as default
   cardConfig.isLight = (settings.theme === 'light');
@@ -1626,32 +1626,33 @@ async function shareLive(id){
   try {
     const roomCode = await window.fbStartLive(cd);
     cd._roomCode = roomCode; cd._live = true;
-    saveCdWithSync(cd);
-    // Start listening for remote edits
+    // Save locally only — don't push via saveCdWithSync (would re-trigger pushLiveUpdate
+    // before listener is attached, causing a spurious nonce that echoes back)
+    saveCd();
+    if(window.fbUser && window.fbSaveCountdown) window.fbSaveCountdown(window.fbUser.uid, cd);
+    // Now attach listener
     _startLiveListener(id, roomCode);
     showLiveSt('✓ Online geteilt!','ok');
-    // Update modal UI
     _updateLiveModalUI(id);
+    renderCdDetail(id); // refresh button label
   } catch(e){ showLiveSt('Fehler: '+e.message,'err'); }
 }
 
 function _startLiveListener(cdId, roomCode){
   if(_liveListeners[cdId]){ _liveListeners[cdId](); delete _liveListeners[cdId]; }
   _liveListeners[cdId] = window.fbListenLive(roomCode, (remote) => {
-    // Skip our own echo by nonce
-    if(remote._nonce && _myNonces.has(remote._nonce)) return;
-
+    // Skip our own echo
+    if(remote._nonce && _myNonces.has(remote._nonce)){
+      _myNonces.delete(remote._nonce); // clean up
+      return;
+    }
     const local = countdowns.find(c=>c.id===cdId);
     if(!local) return;
-
-    const remoteTs = typeof remote._ts === 'number' ? remote._ts : 0;
-    const localTs  = local._savedTs || 0;
-    if(remoteTs <= localTs) return;
-
-    const keep = {id:local.id, _roomCode:local._roomCode, _live:local._live,
-                  _joinedLive:local._joinedLive, _savedTs:remoteTs};
+    // Apply remote, preserve our live metadata
+    const keep = {id:local.id, _roomCode:local._roomCode, _live:local._live, _joinedLive:local._joinedLive};
     Object.assign(local, remote, keep);
     delete local._localNonce;
+    local._savedTs = remote._ts || Date.now();
     saveCd();
     if(activeCountdownId===cdId) renderCdDetail(cdId);
     renderList();
@@ -1779,53 +1780,61 @@ async function startQrScanner(){
     });
     video.srcObject = _qrStream;
     video.setAttribute('playsinline','');
-    video.setAttribute('muted','');
     video.muted = true;
-    // Start playing — don't await, start scan loop immediately
-    video.play().catch(()=>{});
+    await video.play();
     if(st) st.textContent='Kamera läuft — QR-Code in Sichtfeld halten';
     _qrLastScan = 0;
     cancelAnimationFrame(_qrAnimFrame);
-    _qrAnimFrame = requestAnimationFrame(scanQrFrame);
+    // Small delay so first frame is available
+    setTimeout(()=>{ _qrAnimFrame = requestAnimationFrame(scanQrFrame); }, 300);
   } catch(e){
-    if(st){ st.style.color='#e07070'; st.textContent='Kamera nicht verfügbar: '+(e.name||e.message); }
+    if(st){ st.style.color='#e07070'; st.textContent='Kamera: '+(e.name==='NotAllowedError'?'Zugriff verweigert':e.name||e.message); }
     if(wrap) wrap.style.display='none';
   }
 }
+let _qrFrameCount = 0;
 function scanQrFrame(){
   const video=document.getElementById('qrVideo');
   const canvas=document.getElementById('qrScanCanvas');
   const st=document.getElementById('qrScanStatus');
-  // Wait until video has actual pixel data
-  if(!video || video.videoWidth === 0){
+  if(!video || !canvas){
+    _qrAnimFrame=requestAnimationFrame(scanQrFrame); return;
+  }
+  // Wait for actual video pixels
+  if(video.videoWidth === 0 || video.videoHeight === 0){
     _qrAnimFrame=requestAnimationFrame(scanQrFrame); return;
   }
   const now=performance.now();
-  if(now-_qrLastScan < 150){ _qrAnimFrame=requestAnimationFrame(scanQrFrame); return; }
+  if(now-_qrLastScan < 200){ _qrAnimFrame=requestAnimationFrame(scanQrFrame); return; }
   _qrLastScan=now;
+  _qrFrameCount++;
+  if(_qrFrameCount <= 3) console.log('[QR] scanning frame', _qrFrameCount, video.videoWidth+'x'+video.videoHeight);
 
   canvas.width=video.videoWidth; canvas.height=video.videoHeight;
   const ctx=canvas.getContext('2d');
   ctx.drawImage(video,0,0,canvas.width,canvas.height);
   const imgData=ctx.getImageData(0,0,canvas.width,canvas.height);
-  if(!window.jsQR){ _qrAnimFrame=requestAnimationFrame(scanQrFrame); return; }
+  if(!window.jsQR){
+    console.warn('[QR] jsQR not loaded');
+    _qrAnimFrame=requestAnimationFrame(scanQrFrame); return;
+  }
   const result=window.jsQR(imgData.data,imgData.width,imgData.height,{inversionAttempts:'attemptBoth'});
   if(result&&result.data){
+    console.log('[QR] found:', result.data.slice(0,40));
     stopQrScanner();
     if(st){ st.style.color='var(--green)'; st.textContent='✓ QR-Code erkannt!'; }
-
     const scanned = result.data.trim();
-
     // Long Base64 share code → import directly
-    const tryDecode = decodeCD(scanned);
-    if(tryDecode && tryDecode.date && tryDecode.name){
-      countdowns.unshift(tryDecode);
-      saveCd(); saveCdWithSync(tryDecode); renderList();
-      document.getElementById('importPickerModal').classList.remove('open');
-      setTimeout(()=>selectCountdown(tryDecode.id), 100);
-      return;
-    }
-
+    try {
+      const tryDecode = decodeCD(scanned);
+      if(tryDecode && tryDecode.date && tryDecode.name){
+        countdowns.unshift(tryDecode);
+        saveCd(); saveCdWithSync(tryDecode); renderList();
+        document.getElementById('importPickerModal').classList.remove('open');
+        setTimeout(()=>selectCountdown(tryDecode.id), 100);
+        return;
+      }
+    } catch(e){}
     // Short room code → join live
     const roomCode = scanned.toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,6);
     const input=document.getElementById('liveCodeInput');
