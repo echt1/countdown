@@ -13,7 +13,7 @@
 import { initializeApp }                          from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
                                                    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-import { getFirestore, doc, collection, setDoc, deleteDoc, onSnapshot, writeBatch, serverTimestamp }
+import { getFirestore, doc, getDoc, collection, setDoc, deleteDoc, onSnapshot, writeBatch, serverTimestamp }
                                                    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -162,9 +162,15 @@ window.fbListenLive = (roomCode, callback) => {
   });
 };
 
-window.fbStopLive = async (roomCode) => {
-  // Don't delete — just let it persist so others can still read
-  // Optionally mark as inactive
+window.fbStopLive = async (roomCode) => {};
+
+// Changelog: reads /meta/changelog document
+// You update this in Firebase Console — no server needed
+window.fbCheckChangelog = (callback) => {
+  const ref = doc(db, 'meta', 'changelog');
+  getDoc(ref).then(snap => {
+    if(snap.exists()) callback(snap.data());
+  }).catch(()=>{});
 };
 
 </script>
@@ -1930,9 +1936,13 @@ function saveSettings(){ document.getElementById('settingsModal').classList.remo
 
 // ═══════════════ CATEGORIES ═══════════════
 function getAllCats(){
-  const set=new Set(settings.cats||[]);
-  countdowns.forEach(cd=>{ if(cd.cat) set.add(cd.cat); });
-  return [...set].sort();
+  // Start with manually ordered cats from settings
+  const ordered = [...(settings.cats||[])];
+  // Append any cats that exist on countdowns but aren't in settings yet
+  countdowns.forEach(cd=>{
+    if(cd.cat && !ordered.includes(cd.cat)) ordered.push(cd.cat);
+  });
+  return ordered;
 }
 function renderSettCats(){
   const pills=document.getElementById('settCatPills');
@@ -2066,7 +2076,8 @@ function renderList(){
       draggable="true"
       ondragstart="onCatDragStart(event,'${cat.replace(/'/g,"\'")}')"
       ondragover="onCatDragOver(event,'${cat.replace(/'/g,"\'")}',this)"
-      ondragleave="this.querySelector('.sidebar-section-header').classList.remove('drag-over-section')"
+      ondragleave="onCatDragLeave(event,this)"
+      ondragend="catDragSrc=null"
       ondrop="onCatDrop(event,'${cat.replace(/'/g,"\'")}')">
       <div class="sidebar-section-header"
         onclick="toggleSection2('${cat.replace(/'/g,"\'")}')">
@@ -2162,17 +2173,22 @@ function initDrag(){}
 // ── Category (section) reorder ──
 let catDragSrc = null;
 function onCatDragStart(e, cat){
+  // Only allow drag from the ⠿ handle
+  if(!e.target.classList.contains('section-drag-handle') && !e.target.closest('.section-drag-handle')){
+    e.preventDefault(); return;
+  }
   catDragSrc = cat;
   e.stopPropagation();
   e.dataTransfer.effectAllowed = 'move';
   e.dataTransfer.setData('text/plain', 'cat:'+cat);
 }
 function onCatDragOver(e, cat, el){
-  // Only handle if dragging a category, not a countdown item
-  const data = e.dataTransfer.types.includes('text/plain');
-  if(!catDragSrc || catDragSrc === cat) return;
+  if(!catDragSrc || catDragSrc === cat) return; // not a cat drag
   e.preventDefault(); e.stopPropagation();
   el.querySelector('.sidebar-section-header').classList.add('drag-over-section');
+}
+function onCatDragLeave(e, el){
+  el.querySelector('.sidebar-section-header')?.classList.remove('drag-over-section');
 }
 function onCatDrop(e, targetCat){
   e.preventDefault(); e.stopPropagation();
@@ -3288,16 +3304,52 @@ function copyEmbedCode(){
 // minute refresh
 setInterval(()=>{renderList();renderTrackerList();},60000);
 
-// ═══════════════ INIT ═══════════════
+// ═══════════════ CHANGELOG ═══════════════
+function checkChangelog(){
+  if(!window.fbCheckChangelog) return;
+  window.fbCheckChangelog((data)=>{
+    if(!data || !data.version) return;
+    const seen = localStorage.getItem('cs4_changelog_seen') || '0';
+    if(data.version <= seen) return; // already seen
+    // Show popup
+    document.getElementById('changelogTitle').textContent = data.title || 'Was ist neu';
+    document.getElementById('changelogVersion').textContent = 'Version ' + data.version;
+    document.getElementById('changelogBody').textContent = data.body || '';
+    document.getElementById('changelogModal').style.display = 'flex';
+    document.getElementById('changelogModal').classList.add('open');
+  });
+}
+function dismissChangelog(){
+  const ver = document.getElementById('changelogVersion').textContent.replace('Version ','');
+  localStorage.setItem('cs4_changelog_seen', ver);
+  document.getElementById('changelogModal').classList.remove('open');
+}
+
 applyTheme();
 applyBranding();
 renderList();
 if(currentRoom) subscribeRoom(currentRoom.code);
-// Re-attach live listeners for any live countdowns
 countdowns.filter(c=>c._live&&c._roomCode).forEach(c=>_startLiveListener(c.id,c._roomCode));
 renderTrackerList();
 if(countdowns.length) selectCountdown(countdowns[0].id);
+setTimeout(checkChangelog, 2500);
 </script>
+<!-- ── CHANGELOG POPUP ── -->
+<div class="modal-overlay" id="changelogModal" style="z-index:600">
+  <div class="modal" style="max-width:420px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
+      <div style="font-size:20px">🎉</div>
+      <div>
+        <div class="modal-title" style="margin:0" id="changelogTitle">Was ist neu</div>
+        <div style="font-size:11px;color:var(--tm)" id="changelogVersion"></div>
+      </div>
+    </div>
+    <div id="changelogBody" style="font-size:13px;color:var(--td);line-height:1.8;margin:14px 0;white-space:pre-wrap"></div>
+    <div class="form-actions">
+      <button class="btn-primary" onclick="dismissChangelog()">Verstanden 👍</button>
+    </div>
+  </div>
+</div>
 
 </body>
 </html>
