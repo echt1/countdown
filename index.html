@@ -6,7 +6,6 @@
 <title>Countdown Studio</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
 <script type="module">
 // ═══════════════════════════════════════════════════════════
 // FIREBASE — loaded as ES module, exposes helpers to window
@@ -147,7 +146,8 @@ window.fbUpdateLive = async (cd) => {
   await setDoc(doc(db, 'rooms', cd._roomCode), {
     ...cleanCd,
     _roomCode: cd._roomCode,
-    _ts: serverTimestamp()
+    _ts: serverTimestamp(),
+    _nonce: cd._localNonce || ''
   });
 };
 
@@ -592,7 +592,7 @@ body::after{content:'';position:fixed;inset:0;background:radial-gradient(ellipse
 
 /* Share Card */
 .share-card-canvas-wrap{display:flex;justify-content:center;padding:8px 0 12px;}
-canvas#shareCardCanvas{border-radius:12px;max-width:100%;}
+canvas#shareCardCanvas{border-radius:12px;max-width:100%;height:auto;display:block;}
 .qr-box{display:flex;justify-content:center;padding:16px 0 8px;}
 .qr-box canvas,.qr-box img{border-radius:8px;}
 .share-tabs{display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:16px;}
@@ -820,8 +820,28 @@ canvas#shareCardCanvas{border-radius:12px;max-width:100%;}
     </div>
     <!-- Card panel -->
     <div class="share-panel" id="sharePanelCard">
-      <div class="modal-sub" style="margin-top:0">Visuelle Share-Karte — als Bild speichern und teilen.</div>
-      <div class="share-card-canvas-wrap"><canvas id="shareCardCanvas" width="600" height="340"></canvas></div>
+      <div class="share-card-canvas-wrap" style="margin-bottom:10px"><canvas id="shareCardCanvas"></canvas></div>
+      <!-- Card editor -->
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+        <div style="display:flex;gap:4px;align-items:center">
+          <span style="font-size:10px;color:var(--tm);white-space:nowrap">Theme</span>
+          <button class="theme-btn" id="cardThemeBtn" onclick="toggleCardTheme()" style="font-size:10px;padding:4px 8px">🌙 Dark</button>
+        </div>
+        <div style="display:flex;gap:4px;align-items:center">
+          <span style="font-size:10px;color:var(--tm);white-space:nowrap">Farbe</span>
+          <button class="theme-btn active" onclick="setCardAccent('red',this)" style="font-size:10px;padding:4px 8px;color:#e87060">●</button>
+          <button class="theme-btn" onclick="setCardAccent('amber',this)" style="font-size:10px;padding:4px 8px;color:#e8b060">●</button>
+          <button class="theme-btn" onclick="setCardAccent('green',this)" style="font-size:10px;padding:4px 8px;color:#6dbf9a">●</button>
+          <button class="theme-btn" onclick="setCardAccent('blue',this)" style="font-size:10px;padding:4px 8px;color:#7ab8e8">●</button>
+        </div>
+        <div style="display:flex;gap:4px;align-items:center">
+          <span style="font-size:10px;color:var(--tm);white-space:nowrap">BG</span>
+          <button class="theme-btn active" id="cardGrad0" onclick="setCardGrad(0,this)" style="font-size:10px;padding:4px 8px">◼ Standard</button>
+          <button class="theme-btn" id="cardGrad1" onclick="setCardGrad(1,this)" style="font-size:10px;padding:4px 8px">◈ Warm</button>
+          <button class="theme-btn" id="cardGrad2" onclick="setCardGrad(2,this)" style="font-size:10px;padding:4px 8px">◉ Cool</button>
+          <button class="theme-btn" id="cardGrad3" onclick="setCardGrad(3,this)" style="font-size:10px;padding:4px 8px">◇ Neutral</button>
+        </div>
+      </div>
       <button class="copy-btn" onclick="downloadShareCard()">⬇ Als PNG speichern</button>
     </div>
     <!-- Embed panel -->
@@ -1190,112 +1210,6 @@ function dpClick(dstr, cId, hId){
 function dpRemove(dstr,cId,hId){ dpState.selected.delete(dstr); dpState.rangeStart=null; dpRender(cId,hId); }
 function dpNav(delta,cId,hId){ dpState.month.setMonth(dpState.month.getMonth()+delta); dpRender(cId,hId); }
 
-// ═══════════════ SHARE CARD ═══════════════
-function generateShareCard(id){
-  const cd = countdowns.find(c=>c.id===id); if(!cd) return;
-  const canvas = document.getElementById('shareCardCanvas'); if(!canvas) return;
-  const W=400, H=220;
-  canvas.width=W*2; canvas.height=H*2; canvas.style.width=W+'px'; canvas.style.height=H+'px';
-  const ctx=canvas.getContext('2d'); ctx.scale(2,2);
-  const isLight=(settings.theme||'')==='light';
-  const accentKey=settings.accent||'';
-  const accents={'':['#d95f3b','#c44a2a'],amber:['#c97d20','#a06010'],green:['#3a9e6a','#2a7a50'],blue:['#2e6fd4','#1a50a8']};
-  const accent=accents[accentKey]||accents[''];
-
-  // Background
-  ctx.fillStyle=isLight?'#f5f0ed':'#120a08';
-  roundRect(ctx,0,0,W,H,16); ctx.fill();
-
-  // Subtle gradient top
-  const bgGrad=ctx.createLinearGradient(W*0.3,0,W,H*0.6);
-  bgGrad.addColorStop(0, isLight?'rgba(217,95,59,0.06)':'rgba(217,95,59,0.08)');
-  bgGrad.addColorStop(1,'rgba(0,0,0,0)');
-  ctx.fillStyle=bgGrad; roundRect(ctx,0,0,W,H,16); ctx.fill();
-
-  // Accent bar top
-  const barGrad=ctx.createLinearGradient(0,0,W,0);
-  barGrad.addColorStop(0,accent[0]); barGrad.addColorStop(1,accent[1]);
-  ctx.fillStyle=barGrad;
-  ctx.beginPath(); ctx.roundRect(0,0,W,4,[4,4,0,0]); ctx.fill();
-
-  // Emoji
-  ctx.font='48px serif'; ctx.textAlign='left';
-  ctx.fillText(cd.emoji, 28, 72);
-
-  // Count number (big)
-  const {count,isPast}=countDays(cd.date,cd.mode,cd.wdays,cd.exclude,cd.include,null);
-  const numStr=String(count);
-  ctx.font='bold 72px "Plus Jakarta Sans", sans-serif';
-  const numGrad=ctx.createLinearGradient(W-160,80,W-20,150);
-  numGrad.addColorStop(0,isLight?accent[0]:'#f0a882');
-  numGrad.addColorStop(1,accent[0]);
-  ctx.fillStyle=numGrad; ctx.textAlign='right';
-  const numW=ctx.measureText(numStr).width;
-  ctx.fillText(numStr, W-36, 136);
-
-  // Unit label
-  ctx.font='bold 11px "Plus Jakarta Sans", sans-serif';
-  ctx.fillStyle=isLight?'#8a7060':'#7a5a52';
-  const unitLine1=isPast?'TAGE':'TAGE';
-  const unitLine2=isPast?'VERGANGEN':'VERBLEIBEND';
-  ctx.fillText(unitLine1, W-36, 152);
-  ctx.fillText(unitLine2, W-36, 166);
-
-  // Name
-  ctx.font='bold 20px "Plus Jakarta Sans", sans-serif';
-  ctx.fillStyle=isLight?'#1a0f0a':'#f5ede8';
-  ctx.textAlign='left';
-  // Truncate if too long
-  let name=cd.name;
-  while(ctx.measureText(name).width>W-100&&name.length>3) name=name.slice(0,-1);
-  if(name!==cd.name) name+='…';
-  ctx.fillText(name, 28, 118);
-
-  // Date
-  ctx.font='13px "Plus Jakarta Sans", sans-serif';
-  ctx.fillStyle=isLight?'#8a7060':'#7a5a52';
-  ctx.fillText(fmtDate(cd.date), 28, 140);
-
-  // Mode pill
-  ctx.font='bold 10px "Plus Jakarta Sans", sans-serif';
-  const modeLabel=fmtMode(cd.mode,cd.wdays);
-  const pillW=ctx.measureText(modeLabel).width+16;
-  ctx.fillStyle=isLight?'rgba(217,95,59,0.1)':'rgba(217,95,59,0.15)';
-  ctx.beginPath(); ctx.roundRect(28,154,pillW,18,9); ctx.fill();
-  ctx.fillStyle=accent[0]; ctx.textAlign='left';
-  ctx.fillText(modeLabel,36,166);
-
-  // Progress bar
-  const startA=cd.start||ds(new Date(cd.created||Date.now()));
-  const elapsed=isPast?count:countElapsed(cd.mode,cd.wdays,cd.exclude,cd.include,startA);
-  const total=elapsed+count;
-  const pct=total>0?Math.min(1,elapsed/total):(isPast?1:0);
-  const bx=28,by=188,bw=W-56,bh=4,br=2;
-  ctx.fillStyle=isLight?'#ddd4cc':'#3d2018';
-  ctx.beginPath(); ctx.roundRect(bx,by,bw,bh,br); ctx.fill();
-  if(pct>0){
-    const pg=ctx.createLinearGradient(bx,0,bx+bw,0);
-    pg.addColorStop(0,accent[1]); pg.addColorStop(1,accent[0]);
-    ctx.fillStyle=pg;
-    ctx.beginPath(); ctx.roundRect(bx,by,bw*pct,bh,br); ctx.fill();
-  }
-
-  // Branding watermark
-  ctx.font='10px "Plus Jakarta Sans", sans-serif';
-  ctx.fillStyle=isLight?'rgba(90,60,40,0.3)':'rgba(255,255,255,0.15)';
-  ctx.textAlign='right';
-  ctx.fillText(APP_NAME, W-28, H-12);
-}
-
-function roundRect(ctx,x,y,w,h,r){
-  ctx.beginPath(); ctx.roundRect(x,y,w,h,r);
-}
-
-function downloadShareCard(){
-  const canvas=document.getElementById('shareCardCanvas'); if(!canvas) return;
-  const a=document.createElement('a');
-  a.download='countdown-card.png'; a.href=canvas.toDataURL('image/png'); a.click();
-}
 
 // ═══════════════ EMBED CODE ═══════════════
 function generateEmbedCode(id){
@@ -1567,6 +1481,11 @@ function openShareModal(id){
       colorLight: isDark?'#1a0f0c':'#ffffff',
       correctLevel:QRCode.CorrectLevel.M});
   }catch(e){ qrBox.innerHTML='<div style="font-size:11px;color:var(--tm);padding:16px">QR-Bibliothek nicht geladen.</div>'; }
+  // Sync card config to current app theme/accent as default
+  cardConfig.isLight = (settings.theme === 'light');
+  if(!cardConfig._accentSet) cardConfig.accent = settings.accent || 'red';
+  const cardThemeBtn = document.getElementById('cardThemeBtn');
+  if(cardThemeBtn) cardThemeBtn.textContent = cardConfig.isLight ? '☀️ Light' : '🌙 Dark';
   // Init live/online tab state
   const liveWrap = document.getElementById('liveShareCodeWrap');
   const liveSt = document.getElementById('liveShareStatus');
@@ -1697,7 +1616,7 @@ async function doGcalImport2(){
 
 // ── Online Sync (bidirectional, room-code based) ──
 const _liveListeners = {}; // cdId → unsubscribe fn
-let _ignoreRemoteUntil = {}; // cdId → timestamp, suppress echoes
+let _ignoreRemoteUntil = {}; // legacy, unused
 
 async function shareLive(id){
   const cd = countdowns.find(c=>c.id===id); if(!cd) return;
@@ -1719,19 +1638,23 @@ async function shareLive(id){
 function _startLiveListener(cdId, roomCode){
   if(_liveListeners[cdId]){ _liveListeners[cdId](); delete _liveListeners[cdId]; }
   _liveListeners[cdId] = window.fbListenLive(roomCode, (remote) => {
-    const ignoreUntil = _ignoreRemoteUntil[cdId] || 0;
-    const remoteTs = remote._ts || 0;
-    if(remoteTs <= ignoreUntil) return; // echo suppression
+    // Skip our own echo by nonce
+    if(remote._nonce && _myNonces.has(remote._nonce)) return;
+
     const local = countdowns.find(c=>c.id===cdId);
     if(!local) return;
-    const localTs = local._savedTs || 0;
-    if(remoteTs > localTs){
-      const keepFields = {id:local.id, _roomCode:local._roomCode, _live:local._live, _savedTs:remoteTs, _joinedLive:local._joinedLive};
-      Object.assign(local, remote, keepFields);
-      saveCd();
-      if(activeCountdownId===cdId) renderCdDetail(cdId);
-      renderList();
-    }
+
+    const remoteTs = typeof remote._ts === 'number' ? remote._ts : 0;
+    const localTs  = local._savedTs || 0;
+    if(remoteTs <= localTs) return;
+
+    const keep = {id:local.id, _roomCode:local._roomCode, _live:local._live,
+                  _joinedLive:local._joinedLive, _savedTs:remoteTs};
+    Object.assign(local, remote, keep);
+    delete local._localNonce;
+    saveCd();
+    if(activeCountdownId===cdId) renderCdDetail(cdId);
+    renderList();
   });
 }
 
@@ -1775,12 +1698,17 @@ function _updateLiveModalUI(id){
   }
 }
 
+// Nonces of our own writes — skip echoes in the listener
+const _myNonces = new Set();
+
 // When a live countdown is saved locally, push to Firebase
 function pushLiveUpdate(cd){
   if(!cd._live || !cd._roomCode || !window.fbUpdateLive) return;
-  const now = Date.now();
-  _ignoreRemoteUntil[cd.id] = now + 3000; // ignore echoes for 3s
-  cd._savedTs = now;
+  const nonce = Math.random().toString(36).slice(2, 10);
+  _myNonces.add(nonce);
+  if(_myNonces.size > 30) _myNonces.delete(_myNonces.values().next().value);
+  cd._savedTs = Date.now();
+  cd._localNonce = nonce;
   window.fbUpdateLive(cd).catch(e=>console.warn('Live sync error:',e));
 }
 
@@ -1843,19 +1771,22 @@ async function startQrScanner(){
   const wrap=document.getElementById('qrScannerWrap');
   const video=document.getElementById('qrVideo');
   const st=document.getElementById('qrScanStatus');
-  if(wrap){ wrap.style.display='block'; }
+  if(wrap) wrap.style.display='block';
   if(st){ st.style.color='var(--tm)'; st.textContent='Kamera wird gestartet…'; }
   try {
-    _qrStream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1280},height:{ideal:720}}});
+    _qrStream = await navigator.mediaDevices.getUserMedia({
+      video:{facingMode:'environment', width:{ideal:1280}, height:{ideal:720}}
+    });
     video.srcObject = _qrStream;
-    video.onloadedmetadata = () => {
-      video.play().then(()=>{
-        if(st) st.textContent='Kamera läuft — QR-Code in Sichtfeld halten';
-        _qrLastScan = 0;
-        cancelAnimationFrame(_qrAnimFrame);
-        _qrAnimFrame = requestAnimationFrame(scanQrFrame);
-      });
-    };
+    video.setAttribute('playsinline','');
+    video.setAttribute('muted','');
+    video.muted = true;
+    // Start playing — don't await, start scan loop immediately
+    video.play().catch(()=>{});
+    if(st) st.textContent='Kamera läuft — QR-Code in Sichtfeld halten';
+    _qrLastScan = 0;
+    cancelAnimationFrame(_qrAnimFrame);
+    _qrAnimFrame = requestAnimationFrame(scanQrFrame);
   } catch(e){
     if(st){ st.style.color='#e07070'; st.textContent='Kamera nicht verfügbar: '+(e.name||e.message); }
     if(wrap) wrap.style.display='none';
@@ -1865,11 +1796,12 @@ function scanQrFrame(){
   const video=document.getElementById('qrVideo');
   const canvas=document.getElementById('qrScanCanvas');
   const st=document.getElementById('qrScanStatus');
-  if(!video||!canvas||video.readyState<2||video.paused){
+  // Wait until video has actual pixel data
+  if(!video || video.videoWidth === 0){
     _qrAnimFrame=requestAnimationFrame(scanQrFrame); return;
   }
   const now=performance.now();
-  if(now-_qrLastScan < 100){ _qrAnimFrame=requestAnimationFrame(scanQrFrame); return; }
+  if(now-_qrLastScan < 150){ _qrAnimFrame=requestAnimationFrame(scanQrFrame); return; }
   _qrLastScan=now;
 
   canvas.width=video.videoWidth; canvas.height=video.videoHeight;
@@ -1884,10 +1816,9 @@ function scanQrFrame(){
 
     const scanned = result.data.trim();
 
-    // Is it a long import code (Base64 share code)? Try to decode it directly.
+    // Long Base64 share code → import directly
     const tryDecode = decodeCD(scanned);
     if(tryDecode && tryDecode.date && tryDecode.name){
-      // Valid import code — import directly and close
       countdowns.unshift(tryDecode);
       saveCd(); saveCdWithSync(tryDecode); renderList();
       document.getElementById('importPickerModal').classList.remove('open');
@@ -1895,7 +1826,7 @@ function scanQrFrame(){
       return;
     }
 
-    // Otherwise treat as room code
+    // Short room code → join live
     const roomCode = scanned.toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,6);
     const input=document.getElementById('liveCodeInput');
     if(input) input.value=roomCode;
@@ -2778,98 +2709,152 @@ async function importSelected(){
 });
 
 // ═══════════════ SHARE CARD ═══════════════
+// ── Card config state ──
+let cardConfig = { isLight: false, accent: 'red', grad: 0 };
+function toggleCardTheme(){
+  cardConfig.isLight = !cardConfig.isLight;
+  const btn = document.getElementById('cardThemeBtn');
+  if(btn) btn.textContent = cardConfig.isLight ? '☀️ Light' : '🌙 Dark';
+  if(currentShareCd) drawShareCard(currentShareCd);
+}
+function setCardAccent(a, btn){
+  cardConfig.accent = a; cardConfig._accentSet = true;
+  document.querySelectorAll('#sharePanelCard .theme-btn[onclick*="setCardAccent"]').forEach(b=>b.classList.remove('active'));
+  if(btn) btn.classList.add('active');
+  if(currentShareCd) drawShareCard(currentShareCd);
+}
+function setCardGrad(g, btn){
+  cardConfig.grad = g;
+  [0,1,2,3].forEach(i=>{ const b=document.getElementById('cardGrad'+i); if(b) b.classList.remove('active'); });
+  if(btn) btn.classList.add('active');
+  if(currentShareCd) drawShareCard(currentShareCd);
+}
+
 function drawShareCard(cd) {
   const canvas = document.getElementById('shareCardCanvas');
   if (!canvas) return;
   const ctx = canvas.getContext('2d');
-  const W = 600, H = 340;
-  canvas.width = W; canvas.height = H;
 
-  const { count, isPast } = countDays(cd.date, cd.mode, cd.wdays, cd.exclude, cd.include, cd.start);
-  const isLight = settings.theme === 'light';
-  const accent  = settings.accent === 'amber' ? ['#c97d20','#f0b870'] :
-                  settings.accent === 'green'  ? ['#3a9e6a','#80d4a8'] :
-                  settings.accent === 'blue'   ? ['#2e6fd4','#80b0f0'] :
-                                                  ['#c44a2a','#f0a882'];
+  // 2× retina, logical size 480×240
+  const W = 480, H = 240, S = 2;
+  canvas.width = W*S; canvas.height = H*S;
+  canvas.style.width = W+'px'; canvas.style.height = H+'px';
+  ctx.scale(S, S);
 
-  // Background
+  const { count, isPast } = countDays(cd.date, cd.mode, cd.wdays, cd.exclude||[], cd.include||[], cd.start);
+  const isLight = cardConfig.isLight;
+
+  const accentPalettes = {
+    red:   ['#c44a2a','#f0a882'],
+    amber: ['#c97d20','#f0b870'],
+    green: ['#3a9e6a','#80d4a8'],
+    blue:  ['#2e6fd4','#80b0f0'],
+  };
+  const accent = accentPalettes[cardConfig.accent] || accentPalettes.red;
+
+  const gradDefs = isLight
+    ? [['#f5f0ed','#e8ddd5'],['#fdf0e8','#f0ddd0'],['#eaf0f8','#d8e8f4'],['#f0f0f0','#e0e0e0']]
+    : [['#120a08','#1f0e0a'],['#130e06','#221408'],['#080e14','#0c1620'],['#0e0e0e','#1c1c1c']];
+  const [bgA, bgB] = gradDefs[cardConfig.grad] || gradDefs[0];
+
+  // ── Background ──
   const bg = ctx.createLinearGradient(0,0,W,H);
-  bg.addColorStop(0, isLight ? '#f5f0ed' : '#120a08');
-  bg.addColorStop(1, isLight ? '#e8ddd5' : '#1f0e0a');
+  bg.addColorStop(0, bgA); bg.addColorStop(1, bgB);
   ctx.fillStyle = bg;
-  ctx.beginPath(); roundRect(ctx,0,0,W,H,20); ctx.fill();
+  ctx.beginPath(); roundRect(ctx,0,0,W,H,16); ctx.fill();
 
-  // Glow blob
-  const glow = ctx.createRadialGradient(W*0.75,H*0.25,0,W*0.75,H*0.25,220);
-  glow.addColorStop(0, accent[0]+'33');
-  glow.addColorStop(1, 'transparent');
+  // ── Glow blob ──
+  const glow = ctx.createRadialGradient(W*0.82, H*0.3, 0, W*0.82, H*0.3, 180);
+  glow.addColorStop(0, accent[0]+'30'); glow.addColorStop(1, 'transparent');
   ctx.fillStyle = glow;
-  ctx.fillRect(0,0,W,H);
+  ctx.beginPath(); roundRect(ctx,0,0,W,H,16); ctx.fill();
 
-  // App name top-left
-  ctx.font = '600 12px "Plus Jakarta Sans", sans-serif';
-  ctx.fillStyle = isLight ? '#8a7060' : '#7a5a52';
-  ctx.fillText('COUNTDOWN STUDIO', 36, 44);
+  // ── Subtle shiny border ──
+  ctx.save();
+  ctx.beginPath(); roundRect(ctx,0.6,0.6,W-1.2,H-1.2,15.5);
+  ctx.strokeStyle = isLight ? 'rgba(255,255,255,0.6)' : 'rgba(255,255,255,0.09)';
+  ctx.lineWidth = 1.2; ctx.stroke();
+  ctx.restore();
 
-  // Emoji
-  ctx.font = '52px serif';
-  ctx.fillText(cd.emoji, 34, 130);
+  // ── Layout constants ──
+  const PAD = 26;
+  const RIGHT = W - PAD;
+  const COL = W * 0.54; // left/right split
 
-  // Countdown name
-  ctx.font = 'bold 28px "Plus Jakarta Sans", sans-serif';
+  // ── App name ──  Y=20
+  ctx.font = '600 9px "Plus Jakarta Sans", sans-serif';
+  ctx.fillStyle = isLight ? '#a09080' : '#6a4a42';
+  ctx.textAlign = 'left';
+  ctx.fillText(APP_NAME.toUpperCase(), PAD, 20);
+
+  // ── Emoji ──  Y=50 baseline
+  ctx.font = '28px serif';
+  ctx.fillText(cd.emoji, PAD, 54);
+
+  // ── Title ──  Y=76 baseline
+  ctx.font = 'bold 20px "Plus Jakarta Sans", sans-serif';
   ctx.fillStyle = isLight ? '#1a0f0a' : '#f5ede8';
-  ctx.fillText(cd.name.length > 30 ? cd.name.slice(0,28)+'…' : cd.name, 36, 182);
+  const maxTitleW = COL - PAD - 8;
+  let title = cd.name;
+  while(ctx.measureText(title).width > maxTitleW && title.length > 2) title = title.slice(0,-1);
+  if(title !== cd.name) title = title.trimEnd() + '…';
+  ctx.fillText(title, PAD, 80);
 
-  // Date
-  ctx.font = '500 14px "Plus Jakarta Sans", sans-serif';
+  // ── Date ──  Y=96 baseline
+  ctx.font = '500 11px "Plus Jakarta Sans", sans-serif';
   ctx.fillStyle = isLight ? '#8a7060' : '#a87a6e';
-  ctx.fillText(fmtDate(cd.date) + (cd.allDay ? '' : ' · ' + (cd.time||'00:00')), 36, 210);
+  ctx.fillText(fmtDate(cd.date), PAD, 96);
 
-  // Big number
+  // ── Big number (right column, right-aligned to RIGHT) ──
   const numStr = String(count);
-  ctx.font = 'bold 88px "Plus Jakarta Sans", sans-serif';
-  const grad = ctx.createLinearGradient(W-260,0,W-60,0);
-  grad.addColorStop(0, accent[1]);
-  grad.addColorStop(1, accent[0]);
-  ctx.fillStyle = grad;
+  ctx.font = 'bold 72px "Plus Jakarta Sans", sans-serif';
+  const numGrad = ctx.createLinearGradient(COL,0,RIGHT,0);
+  numGrad.addColorStop(0, accent[1]); numGrad.addColorStop(1, accent[0]);
+  ctx.fillStyle = numGrad;
+  ctx.textAlign = 'right';
+  ctx.fillText(numStr, RIGHT, 116);
+
+  // ── "TAGE NOCH" — same Y as date (96), left-aligned at number's left edge ──
   const numW = ctx.measureText(numStr).width;
-  ctx.fillText(numStr, W - 60 - numW, 190);
+  const numLeft = RIGHT - numW;
+  ctx.font = 'bold 9px "Plus Jakarta Sans", sans-serif';
+  ctx.fillStyle = isLight ? '#a09080' : '#7a5a52';
+  ctx.textAlign = 'left';
+  ctx.fillText(isPast ? 'TAGE' : 'TAGE', numLeft, 90);
+  ctx.fillText(isPast ? 'VERGANGEN' : 'NOCH', numLeft, 100);
 
-  // Unit label
-  ctx.font = 'bold 13px "Plus Jakarta Sans", sans-serif';
-  ctx.fillStyle = isLight ? '#8a7060' : '#7a5a52';
-  const unit = isPast ? 'TAGE\nVERGANGEN' : 'TAGE\nNOCH';
-  ctx.fillText(unit.split('\n')[0], W-numW-58, 212);
-  ctx.fillText(unit.split('\n')[1], W-numW-58, 228);
+  // ── Progress bar ──  Y=136
+  const BAR_Y = 136, BAR_H = 4, BAR_R = 2;
+  const today0 = new Date(); today0.setHours(0,0,0,0);
+  const target0 = new Date(cd.date+'T00:00:00'); target0.setHours(0,0,0,0);
+  let startAnchor;
+  if(cd.start){ startAnchor=new Date(cd.start+'T00:00:00'); startAnchor.setHours(0,0,0,0); }
+  else if(cd.created){ startAnchor=new Date(cd.created); startAnchor.setHours(0,0,0,0); }
+  else { startAnchor=new Date(target0); startAnchor.setDate(startAnchor.getDate()-30); }
+  const totalMs = target0-startAnchor;
+  const elapsedMs = today0-startAnchor;
+  const pct = totalMs<=0?(isPast?1:0):isPast?1:Math.min(1,Math.max(0,elapsedMs/totalMs));
 
-  // Progress bar
-  const totalAll = countDays(cd.date,'all',null,[],[],cd.start);
-  const startA = cd.start||ds(new Date(cd.created||Date.now()));
-  const elapsed = isPast ? totalAll.count : countElapsed(cd.mode,cd.wdays,cd.exclude,cd.include,startA);
-  const total = elapsed + count;
-  const pct = total>0 ? Math.min(1, elapsed/total) : (isPast?1:0);
-  const barX=36, barY=252, barW=W-72, barH=5, barR=3;
-  ctx.fillStyle = isLight ? '#ddd4cc' : '#3d2018';
-  roundRect(ctx,barX,barY,barW,barH,barR); ctx.fill();
+  ctx.fillStyle = isLight ? '#ddd4cc' : '#3a1a12';
+  roundRect(ctx, PAD, BAR_Y, RIGHT-PAD, BAR_H, BAR_R); ctx.fill();
   if(pct>0){
-    const barGrad = ctx.createLinearGradient(barX,0,barX+barW,0);
+    const barGrad = ctx.createLinearGradient(PAD,0,RIGHT,0);
     barGrad.addColorStop(0,accent[0]); barGrad.addColorStop(1,accent[1]);
     ctx.fillStyle = barGrad;
-    roundRect(ctx,barX,barY,Math.max(barR*2, barW*pct),barH,barR); ctx.fill();
+    roundRect(ctx, PAD, BAR_Y, Math.max(BAR_R*2,(RIGHT-PAD)*pct), BAR_H, BAR_R); ctx.fill();
   }
 
-  // Mode tag + total days
-  ctx.font = '600 11px "Plus Jakarta Sans", sans-serif';
-  ctx.fillStyle = isLight ? '#8a7060' : '#7a5a52';
-  const modeLabel = fmtMode(cd.mode, cd.wdays);
-  const totalDays = countDays(cd.date,'all',null,[],[],null).count;
-  ctx.fillText(modeLabel + ' · ' + totalDays + ' Kalendertage', 36, 290);
-
-  // Bottom watermark
-  ctx.font = '500 11px "Plus Jakarta Sans", sans-serif';
-  ctx.fillStyle = isLight ? '#c0b0a0' : '#3d2018';
-  ctx.fillText('tinyurl.com/countdownstudio', W-210, H-20);
+  // ── Sub-bar row ──  Y=152
+  const SUB_Y = BAR_Y + BAR_H + 12;
+  ctx.font = '500 9px "Plus Jakarta Sans", sans-serif';
+  ctx.fillStyle = isLight ? '#a09080' : '#6a4a42';
+  ctx.textAlign = 'left';
+  ctx.fillText(fmtMode(cd.mode, cd.wdays) + ' · ' + Math.round(pct*100) + '%', PAD, SUB_Y);
+  ctx.textAlign = 'right';
+  ctx.fillText('tinyurl.com/countdownstudio', RIGHT, SUB_Y);
 }
+
+
 
 function roundRect(ctx,x,y,w,h,r){
   ctx.beginPath();
