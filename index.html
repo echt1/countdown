@@ -164,13 +164,13 @@ window.fbListenLive = (roomCode, callback) => {
 
 window.fbStopLive = async (roomCode) => {};
 
-// Changelog: reads /meta/changelog document
-// You update this in Firebase Console — no server needed
+// Changelog: reads /meta/changelog — must be public-readable in Firestore Rules:
+// match /meta/{doc} { allow read: if true; }
 window.fbCheckChangelog = (callback) => {
   const ref = doc(db, 'meta', 'changelog');
-  getDoc(ref).then(snap => {
-    if(snap.exists()) callback(snap.data());
-  }).catch(()=>{});
+  getDoc(ref)
+    .then(snap => { if(snap.exists()) callback(snap.data()); else callback(null); })
+    .catch(e => { console.warn('[Changelog] Firestore read failed:', e.message, '— add: match /meta/{d} { allow read: if true; }'); callback(null); });
 };
 
 </script>
@@ -1015,7 +1015,8 @@ canvas#shareCardCanvas{border-radius:12px;max-width:100%;height:auto;display:blo
     </div>
     <div class="settings-section" style="margin-top:14px">
       <div class="settings-section-title">Über</div>
-      <div style="font-size:12px;color:var(--tm);line-height:1.8">Version 0.9 · Gebaut mit ❤️<br>Weitere Features kommen bald.</div>
+      <div style="font-size:12px;color:var(--tm);line-height:1.8;margin-bottom:10px">Version 0.9 · Gebaut mit ❤️</div>
+      <button class="btn-secondary" style="width:100%;font-size:12px" onclick="document.getElementById('settingsModal').classList.remove('open');setTimeout(showChangelogForced,100)">📰 News & Changelog anzeigen</button>
     </div>
     <div class="form-actions"><button class="btn-primary" onclick="document.getElementById('settingsModal').classList.remove('open')">Fertig</button></div>
   </div>
@@ -1130,8 +1131,6 @@ let fCatSelected = null; // single category per countdown
 let parsedEvts = [], selEvts = new Set(), evtFilter = 'future';
 // tracker month nav
 let trackerMonth = new Date();
-// drag
-let dragSrcId = null;
 
 function saveCd() {
   localStorage.setItem('cs4_cd', JSON.stringify(countdowns));
@@ -2081,7 +2080,11 @@ function renderList(){
       ondrop="onCatDrop(event,'${cat.replace(/'/g,"\'")}')">
       <div class="sidebar-section-header"
         onclick="toggleSection2('${cat.replace(/'/g,"\'")}')">
-        <span class="section-drag-handle">⠿</span>
+        <span class="section-drag-handle"
+          onmousedown="onCatHandleMouseDown()"
+          onmouseup="onCatHandleMouseUp()"
+          ontouchstart="onCatHandleMouseDown()"
+          ontouchend="onCatHandleMouseUp()">⠿</span>
         <span class="sidebar-section-arrow ${open?'open':''}">▶</span>
         <span class="sidebar-section-name">${cat}</span>
         <span class="sidebar-section-count">${items.length}</span>
@@ -2126,21 +2129,7 @@ function toggleSection2(cat){
   renderList();
 }
 
-// Drop onto a section header → reassign category
-function onDragOverSection(e, cat, el){
-  e.preventDefault(); e.stopPropagation();
-  e.dataTransfer.dropEffect='move';
-  el.classList.add('drag-over-section');
-}
-function onDropSection(e, cat, el){
-  e.preventDefault(); el.classList.remove('drag-over-section');
-  if(!dragSrcId) return;
-  const cd = countdowns.find(c=>c.id===dragSrcId); if(!cd) return;
-  cd.cat = cat==='__none__' ? null : cat;
-  saveCd();
-  saveCdWithSync(cd);
-  renderList();
-}
+
 
 function cdItemHtml(cd){
   const {count,isPast}=countDays(cd.date,cd.mode,cd.wdays,cd.exclude,cd.include,null);
@@ -2168,24 +2157,81 @@ function cdItemHtml(cd){
 }
 
 // ═══════════════ DRAG & DROP ═══════════════
-function initDrag(){}
+// ── Drag state ──
+let dragSrcId = null;   // countdown drag
+let catDragSrc = null;  // category drag
 
-// ── Category (section) reorder ──
-let catDragSrc = null;
-function onCatDragStart(e, cat){
-  // Only allow drag from the ⠿ handle
-  if(!e.target.classList.contains('section-drag-handle') && !e.target.closest('.section-drag-handle')){
-    e.preventDefault(); return;
+// ── Countdown item drag ──
+function onDragStart(e, id){
+  e.stopPropagation(); // don't bubble to section
+  dragSrcId = id;
+  catDragSrc = null;
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', 'cd:'+id);
+  setTimeout(()=>{ const el=document.getElementById('li-'+id); if(el) el.classList.add('dragging'); }, 0);
+}
+function onDragOver(e, id){
+  if(!dragSrcId || catDragSrc) return; // only handle countdown drags
+  e.preventDefault(); e.stopPropagation();
+  e.dataTransfer.dropEffect = 'move';
+  if(id !== dragSrcId){ const el=document.getElementById('li-'+id); if(el) el.classList.add('drag-over'); }
+}
+function onDragLeave(e){ e.currentTarget.classList.remove('drag-over'); }
+function onDrop(e, targetId){
+  e.preventDefault(); e.stopPropagation();
+  if(!dragSrcId || dragSrcId === targetId) return;
+  const srcIdx = countdowns.findIndex(c=>c.id===dragSrcId);
+  const tgtIdx = countdowns.findIndex(c=>c.id===targetId);
+  if(srcIdx<0||tgtIdx<0) return;
+  const [item] = countdowns.splice(srcIdx,1);
+  countdowns.splice(tgtIdx,0,item);
+  countdowns.forEach((cd,i) => cd.sortOrder = i);
+  saveCd();
+  if(window.fbUser&&window.fbSaveCountdown){
+    window.fbSaveCountdown(window.fbUser.uid, countdowns[tgtIdx]);
+    const other = tgtIdx <= srcIdx ? srcIdx+1 : srcIdx;
+    if(countdowns[other]) window.fbSaveCountdown(window.fbUser.uid, countdowns[other]);
   }
+  renderList();
+}
+function onDragEnd(){
+  document.querySelectorAll('.list-item').forEach(el=>el.classList.remove('dragging','drag-over'));
+  dragSrcId = null;
+}
+
+// ── Countdown assigned to section (drop onto section header) ──
+function onDragOverSection(e, cat, el){
+  if(!dragSrcId) return; // only countdown drags
+  e.preventDefault(); e.stopPropagation();
+  el.classList.add('drag-over-section');
+}
+function onDropSection(e, cat, el){
+  e.preventDefault(); e.stopPropagation();
+  el.classList.remove('drag-over-section');
+  if(!dragSrcId) return;
+  const cd = countdowns.find(c=>c.id===dragSrcId);
+  if(!cd) return;
+  cd.cat = (cat === '__none__') ? '' : cat;
+  saveCd(); saveCdWithSync(cd); renderList();
+}
+
+// ── Category section drag (only from ⠿ handle) ──
+let _catDragHandleActive = false;
+function onCatHandleMouseDown(){ _catDragHandleActive = true; }
+function onCatHandleMouseUp(){ _catDragHandleActive = false; }
+
+function onCatDragStart(e, cat){
+  if(!_catDragHandleActive){ e.preventDefault(); return; }
   catDragSrc = cat;
+  dragSrcId = null;
   e.stopPropagation();
   e.dataTransfer.effectAllowed = 'move';
   e.dataTransfer.setData('text/plain', 'cat:'+cat);
 }
 function onCatDragOver(e, cat, el){
-  if(!catDragSrc || catDragSrc === cat) return; // not a cat drag
+  if(!catDragSrc || catDragSrc === cat) return;
   e.preventDefault(); e.stopPropagation();
-  el.querySelector('.sidebar-section-header').classList.add('drag-over-section');
+  el.querySelector('.sidebar-section-header')?.classList.add('drag-over-section');
 }
 function onCatDragLeave(e, el){
   el.querySelector('.sidebar-section-header')?.classList.remove('drag-over-section');
@@ -2193,20 +2239,17 @@ function onCatDragLeave(e, el){
 function onCatDrop(e, targetCat){
   e.preventDefault(); e.stopPropagation();
   document.querySelectorAll('.sidebar-section-header').forEach(h=>h.classList.remove('drag-over-section'));
-  if(!catDragSrc || catDragSrc === targetCat) { catDragSrc=null; return; }
-  // Reorder in settings.cats
+  if(!catDragSrc || catDragSrc === targetCat){ catDragSrc=null; return; }
   const cats = getAllCats();
   const srcIdx = cats.indexOf(catDragSrc), tgtIdx = cats.indexOf(targetCat);
   if(srcIdx<0||tgtIdx<0){ catDragSrc=null; return; }
-  // Rebuild settings.cats in new order
   const [item] = cats.splice(srcIdx,1);
   cats.splice(tgtIdx,0,item);
   settings.cats = cats; saveSett();
-  catDragSrc = null;
+  catDragSrc = null; _catDragHandleActive = false;
   renderList();
 }
-
-// ── Rename category inline ──
+function initDrag(){}
 function renameCat(oldName){
   const newName = prompt(`Kategorie umbenennen: "${oldName}"`, oldName);
   if(!newName || newName===oldName) return;
@@ -2216,32 +2259,6 @@ function renameCat(oldName){
   // Update all countdowns
   countdowns.forEach(cd=>{ if(cd.cat===oldName){ cd.cat=newName; saveCdWithSync(cd); } });
   saveCd(); renderList();
-}
-function onDragStart(e,id){ dragSrcId=id; setTimeout(()=>{ const el=document.getElementById('li-'+id); if(el)el.classList.add('dragging'); },0); e.dataTransfer.effectAllowed='move'; }
-function onDragOver(e,id){ e.preventDefault(); e.dataTransfer.dropEffect='move'; if(id!==dragSrcId){const el=document.getElementById('li-'+id);if(el)el.classList.add('drag-over');} }
-function onDragLeave(e){ e.currentTarget.classList.remove('drag-over'); }
-function onDrop(e,targetId){
-  e.preventDefault();
-  if(dragSrcId===targetId)return;
-  const srcIdx=countdowns.findIndex(c=>c.id===dragSrcId);
-  const tgtIdx=countdowns.findIndex(c=>c.id===targetId);
-  if(srcIdx<0||tgtIdx<0)return;
-  const [item]=countdowns.splice(srcIdx,1);
-  countdowns.splice(tgtIdx,0,item);
-  // Assign sortOrder indices so Firestore sync preserves manual order
-  countdowns.forEach((cd,i) => cd.sortOrder = i);
-  saveCd();
-  // Only write the two moved items to Firestore, not all
-  if(window.fbUser&&window.fbSaveCountdown){
-    window.fbSaveCountdown(window.fbUser.uid, countdowns[tgtIdx]);
-    const otherIdx = tgtIdx <= srcIdx ? srcIdx+1 : srcIdx;
-    if(countdowns[otherIdx]) window.fbSaveCountdown(window.fbUser.uid, countdowns[otherIdx]);
-  }
-  renderList();
-}
-function onDragEnd(){
-  document.querySelectorAll('.list-item').forEach(el=>{el.classList.remove('dragging','drag-over');});
-  dragSrcId=null;
 }
 
 // ═══════════════ COUNTDOWN DETAIL ═══════════════
@@ -3310,18 +3327,28 @@ function checkChangelog(){
   window.fbCheckChangelog((data)=>{
     if(!data || !data.version) return;
     const seen = localStorage.getItem('cs4_changelog_seen') || '0';
-    if(data.version <= seen) return; // already seen
-    // Show popup
-    document.getElementById('changelogTitle').textContent = data.title || 'Was ist neu';
-    document.getElementById('changelogVersion').textContent = 'Version ' + data.version;
-    document.getElementById('changelogBody').textContent = data.body || '';
-    document.getElementById('changelogModal').style.display = 'flex';
-    document.getElementById('changelogModal').classList.add('open');
+    // String comparison works for semver-ish like "0.9", "0.10", "1.0"
+    if(String(data.version) <= String(seen)) return;
+    _showChangelogPopup(data);
   });
 }
+function showChangelogForced(){
+  if(!window.fbCheckChangelog){ alert('Noch kein Changelog verfügbar.'); return; }
+  window.fbCheckChangelog((data)=>{
+    if(!data){ alert('Kein Changelog gefunden.'); return; }
+    _showChangelogPopup(data);
+  });
+}
+function _showChangelogPopup(data){
+  document.getElementById('changelogTitle').textContent = data.title || 'Was ist neu';
+  document.getElementById('changelogVersion').textContent = 'Version ' + data.version;
+  document.getElementById('changelogBody').textContent = data.body || '';
+  const m = document.getElementById('changelogModal');
+  m.style.display = 'flex'; m.classList.add('open');
+}
 function dismissChangelog(){
-  const ver = document.getElementById('changelogVersion').textContent.replace('Version ','');
-  localStorage.setItem('cs4_changelog_seen', ver);
+  const ver = document.getElementById('changelogVersion').textContent.replace('Version ','').trim();
+  if(ver) localStorage.setItem('cs4_changelog_seen', ver);
   document.getElementById('changelogModal').classList.remove('open');
 }
 
