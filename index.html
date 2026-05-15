@@ -3346,13 +3346,13 @@ function _showChangelogPopup(data){
   // Rich text: \n = line break, **text** = bold, *text* = italic, \b = bold marker alt
   const raw = data.body || '';
   document.getElementById('changelogBody').innerHTML = _parseChangelogText(raw);
-  // Logo
+  // Logo as newspaper masthead
   const logoWrap = document.getElementById('changelogLogo');
   if(APP_LOGO){
     const src = getLogoUrl();
-    logoWrap.innerHTML = `<img src="${src}" style="max-width:48px;max-height:48px;object-fit:contain;border-radius:8px" onerror="this.parentElement.innerHTML='⏳'">`;
+    logoWrap.innerHTML = `<img src="${src}" style="max-width:100%;max-height:52px;width:auto;height:auto;object-fit:contain;display:inline-block" onerror="this.parentElement.innerHTML='<span style=\\'font-size:13px;font-weight:800;letter-spacing:2px;color:var(--tm);\\'>${APP_NAME.toUpperCase()}</span>'">`;
   } else {
-    logoWrap.innerHTML = `<span style="font-size:36px">⏳</span>`;
+    logoWrap.innerHTML = `<span style="font-size:13px;font-weight:800;letter-spacing:2px;color:var(--tm)">${APP_NAME.toUpperCase()}</span>`;
   }
   const m = document.getElementById('changelogModal');
   m.dataset.version = data.version || '';
@@ -3401,18 +3401,14 @@ setTimeout(checkChangelog, 2500);
 <!-- ── CHANGELOG POPUP ── -->
 <div class="modal-overlay" id="changelogModal" style="z-index:600;display:none">
   <div class="modal" style="max-width:440px">
-    <div style="display:flex;align-items:center;gap:14px;margin-bottom:16px">
-      <div id="changelogLogo" style="flex-shrink:0;width:48px;height:48px;display:flex;align-items:center;justify-content:center">
-        <!-- Logo or fallback icon rendered by JS -->
-      </div>
-      <div class="modal-title" style="margin:0;font-size:20px;line-height:1.2" id="changelogTitle">Was ist neu</div>
-    </div>
+    <!-- Masthead logo — full width, like a newspaper header -->
+    <div id="changelogLogo" style="margin:0 0 14px;text-align:center"></div>
+    <div class="modal-title" style="margin:0 0 14px;font-size:26px;line-height:1.2" id="changelogTitle">Was ist neu</div>
     <div id="changelogBody" style="font-size:14px;color:var(--td);line-height:1.85;margin:0 0 18px"></div>
     <div class="form-actions">
       <button class="btn-primary" onclick="dismissChangelog()">Verstanden 👍</button>
     </div>
   </div>
 </div>
-
 </body>
 </html>
