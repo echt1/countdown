@@ -1955,7 +1955,10 @@ function addGlobalCat(){
   document.getElementById('settCatInput').value=''; renderSettCats();
 }
 function removeGlobalCat(cat){
-  settings.cats=(settings.cats||[]).filter(c=>c!==cat); renderSettCats();
+  settings.cats=(settings.cats||[]).filter(c=>c!==cat);
+  saveSett();
+  renderSettCats();
+  renderList();
 }
 // Category filter pills removed — sections in sidebar replace this
 
@@ -3327,29 +3330,63 @@ function checkChangelog(){
   window.fbCheckChangelog((data)=>{
     if(!data || !data.version) return;
     const seen = localStorage.getItem('cs4_changelog_seen') || '0';
-    // String comparison works for semver-ish like "0.9", "0.10", "1.0"
     if(String(data.version) <= String(seen)) return;
     _showChangelogPopup(data);
   });
 }
 function showChangelogForced(){
-  if(!window.fbCheckChangelog){ alert('Noch kein Changelog verfügbar.'); return; }
+  if(!window.fbCheckChangelog){ return; }
   window.fbCheckChangelog((data)=>{
-    if(!data){ alert('Kein Changelog gefunden.'); return; }
+    if(!data) return;
     _showChangelogPopup(data);
   });
 }
 function _showChangelogPopup(data){
   document.getElementById('changelogTitle').textContent = data.title || 'Was ist neu';
-  document.getElementById('changelogVersion').textContent = 'Version ' + data.version;
-  document.getElementById('changelogBody').textContent = data.body || '';
+  // Rich text: \n = line break, **text** = bold, *text* = italic, \b = bold marker alt
+  const raw = data.body || '';
+  document.getElementById('changelogBody').innerHTML = _parseChangelogText(raw);
+  // Logo
+  const logoWrap = document.getElementById('changelogLogo');
+  if(APP_LOGO){
+    const src = getLogoUrl();
+    logoWrap.innerHTML = `<img src="${src}" style="max-width:48px;max-height:48px;object-fit:contain;border-radius:8px" onerror="this.parentElement.innerHTML='⏳'">`;
+  } else {
+    logoWrap.innerHTML = `<span style="font-size:36px">⏳</span>`;
+  }
   const m = document.getElementById('changelogModal');
-  m.style.display = 'flex'; m.classList.add('open');
+  m.dataset.version = data.version || '';
+  m.style.display = 'flex';
+  requestAnimationFrame(()=> m.classList.add('open'));
+}
+function _parseChangelogText(text){
+  // Replace literal \n with real newlines first
+  let s = text.replace(/\\n/g, '\n');
+  // Split into lines, parse each
+  return s.split('\n').map(line => {
+    // **bold** and *italic*
+    line = line
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*(.+?)\*/g, '<em>$1</em>');
+    // Bullet lines starting with • or - or *
+    if(/^[•\-]\s/.test(line)){
+      return `<div style="padding-left:14px;position:relative">
+        <span style="position:absolute;left:0;color:var(--accent)">•</span>${line.slice(2)}
+      </div>`;
+    }
+    if(line.trim() === '') return '<div style="height:6px"></div>';
+    return `<div>${line}</div>`;
+  }).join('');
 }
 function dismissChangelog(){
-  const ver = document.getElementById('changelogVersion').textContent.replace('Version ','').trim();
-  if(ver) localStorage.setItem('cs4_changelog_seen', ver);
-  document.getElementById('changelogModal').classList.remove('open');
+  const ver = document.getElementById('changelogVersion')?.textContent?.replace('Version ','').trim()
+    || document.getElementById('changelogTitle').dataset.version || '';
+  // Get version from data attribute we'll store
+  const m = document.getElementById('changelogModal');
+  const storedVer = m.dataset.version;
+  if(storedVer) localStorage.setItem('cs4_changelog_seen', storedVer);
+  m.classList.remove('open');
+  setTimeout(()=> m.style.display = 'none', 280);
 }
 
 applyTheme();
@@ -3362,16 +3399,15 @@ if(countdowns.length) selectCountdown(countdowns[0].id);
 setTimeout(checkChangelog, 2500);
 </script>
 <!-- ── CHANGELOG POPUP ── -->
-<div class="modal-overlay" id="changelogModal" style="z-index:600">
-  <div class="modal" style="max-width:420px">
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
-      <div style="font-size:20px">🎉</div>
-      <div>
-        <div class="modal-title" style="margin:0" id="changelogTitle">Was ist neu</div>
-        <div style="font-size:11px;color:var(--tm)" id="changelogVersion"></div>
+<div class="modal-overlay" id="changelogModal" style="z-index:600;display:none">
+  <div class="modal" style="max-width:440px">
+    <div style="display:flex;align-items:center;gap:14px;margin-bottom:16px">
+      <div id="changelogLogo" style="flex-shrink:0;width:48px;height:48px;display:flex;align-items:center;justify-content:center">
+        <!-- Logo or fallback icon rendered by JS -->
       </div>
+      <div class="modal-title" style="margin:0;font-size:20px;line-height:1.2" id="changelogTitle">Was ist neu</div>
     </div>
-    <div id="changelogBody" style="font-size:13px;color:var(--td);line-height:1.8;margin:14px 0;white-space:pre-wrap"></div>
+    <div id="changelogBody" style="font-size:14px;color:var(--td);line-height:1.85;margin:0 0 18px"></div>
     <div class="form-actions">
       <button class="btn-primary" onclick="dismissChangelog()">Verstanden 👍</button>
     </div>
