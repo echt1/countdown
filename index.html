@@ -3328,23 +3328,21 @@ setInterval(()=>{renderList();renderTrackerList();},60000);
 function checkChangelog(){
   if(!window.fbCheckChangelog) return;
   window.fbCheckChangelog((data)=>{
-    if(!data || data.visible === false){ _updateNewsBtn(false); return; }
-    _updateNewsBtn(true);
-    if(!data.version) return;
+    // Only hide button if explicitly set to false — don't hide on null/error
+    if(data && data.visible === false){ _updateNewsBtn(false); return; }
+    if(!data || !data.version) return;
     const seen = localStorage.getItem('cs4_changelog_seen') || '0';
     if(String(data.version) <= String(seen)) return;
     _showChangelogPopup(data);
   });
 }
 function showChangelogForced(){
-  if(!window.fbCheckChangelog){ return; }
+  if(!window.fbCheckChangelog) return;
   window.fbCheckChangelog((data)=>{
     if(!data || data.visible === false) return;
     _showChangelogPopup(data);
   });
 }
-
-// Update settings news button visibility based on Firebase
 function _updateNewsBtn(visible){
   const btn = document.getElementById('newsBtn');
   if(btn) btn.style.display = visible ? '' : 'none';
