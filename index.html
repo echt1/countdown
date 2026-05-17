@@ -593,12 +593,15 @@ body::after{content:'';position:fixed;inset:0;background:radial-gradient(ellipse
 
 /* Share card canvas overlay */
 .share-card-wrap{text-align:center;}
-#shareCardCanvas{border-radius:12px;max-width:100%;box-shadow:0 8px 32px rgba(0,0,0,.5);}
-.share-card-dl{margin-top:10px;}
-
-/* Share Card */
+/* Toast */
+#toastBar{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--surface2);border:1px solid var(--border2);color:var(--text);padding:10px 16px;border-radius:10px;font-size:13px;display:flex;align-items:center;gap:10px;z-index:900;transition:transform .25s cubic-bezier(.34,1.56,.64,1);box-shadow:0 4px 20px rgba(0,0,0,.4);white-space:nowrap;}
+#toastBar.show{transform:translateX(-50%) translateY(0);}
+#toastBar .toast-undo{background:var(--accent);color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;}
+.list-item.pinned-item{border-left:2px solid var(--accent);}
+.sync-dot.offline{background:#e07070;}
+.recur-badge{font-size:9px;color:var(--accent);font-weight:700;letter-spacing:.5px;margin-left:4px;}
 .share-card-canvas-wrap{display:flex;justify-content:center;padding:8px 0 12px;}
-canvas#shareCardCanvas{border-radius:12px;max-width:100%;height:auto;display:block;}
+canvas#shareCardCanvas{border-radius:12px;max-width:100%;height:auto;display:block;box-shadow:0 4px 20px rgba(0,0,0,.4);}
 .qr-box{display:flex;justify-content:center;padding:16px 0 8px;}
 .qr-box canvas,.qr-box img{border-radius:8px;}
 .share-tabs{display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:16px;}
@@ -746,6 +749,31 @@ canvas#shareCardCanvas{border-radius:12px;max-width:100%;height:auto;display:blo
         <option value="">– Keine –</option>
       </select>
       <div class="hint">Oder Countdown per Drag &amp; Drop in eine Kategorie in der Sidebar ziehen.</div>
+    </div>
+    <div class="form-group" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer">
+        <input type="checkbox" id="fPinned"> 📌 Anpinnen
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer">
+        <input type="checkbox" id="fNotify" onchange="document.getElementById('fNotifyWrap').style.display=this.checked?'block':'none'"> 🔔 Benachrichtigung
+      </label>
+    </div>
+    <div id="fNotifyWrap" style="display:none;margin-top:-6px;margin-bottom:8px">
+      <select class="form-select" id="fNotifyDays" style="font-size:12px">
+        <option value="0">Am Tag selbst</option>
+        <option value="1">1 Tag vorher</option>
+        <option value="3">3 Tage vorher</option>
+        <option value="7" selected>7 Tage vorher</option>
+        <option value="14">14 Tage vorher</option>
+      </select>
+    </div>
+    <div class="form-group"><label class="form-label">Wiederholen</label>
+      <select class="form-select" id="fRepeat">
+        <option value="">Nicht wiederholen</option>
+        <option value="yearly">Jährlich</option>
+        <option value="monthly">Monatlich</option>
+        <option value="weekly">Wöchentlich</option>
+      </select>
     </div>
     <div class="section-divider">Zählmodus</div>
     <div class="form-group"><label class="form-label">Welche Tage zählen?</label>
@@ -1930,8 +1958,13 @@ function openSettings(){
     if(info) info.innerHTML = `Angemeldet als <strong style="color:var(--text)">${window.fbUser.displayName||window.fbUser.email}</strong>`;
   }
   document.getElementById('settingsModal').classList.add('open');
+  // Check news button visibility each time settings opens
+  if(window.fbCheckChangelog){
+    window.fbCheckChangelog((data)=>{
+      _updateNewsBtn(!data || data.visible !== false);
+    });
+  }
 }
-function saveSettings(){ document.getElementById('settingsModal').classList.remove('open'); }
 
 // ═══════════════ CATEGORIES ═══════════════
 function getAllCats(){
@@ -2043,6 +2076,8 @@ function sortedCountdowns(){
   if(sort==='asc') list.sort((a,b)=>a.date.localeCompare(b.date));
   else if(sort==='desc') list.sort((a,b)=>b.date.localeCompare(a.date));
   else if(sort==='name') list.sort((a,b)=>a.name.localeCompare(b.name));
+  // Pinned always float to top within their sort group
+  list.sort((a,b)=>(b.pinned?1:0)-(a.pinned?1:0));
   return list;
 }
 
@@ -2141,7 +2176,9 @@ function cdItemHtml(cd){
   if(!isPast&&rem>0&&rem<86400000){const{h,m}=msToHMS(rem);label=`${h}h ${pad2(m)}min`;}
   else label=isPast?`vor ${count} Tagen`:`in ${count} Tagen`;
   const catPill=cd.cat?`<div class="list-item-cat" style="background:rgba(217,95,59,.12);color:var(--al)">${cd.cat}</div>`:'';
-  const calBorder = cd.calColor ? `border-left:3px solid ${cd.calColor};` : (cd.gcalUid ? 'border-left:3px solid rgba(109,191,154,.5);' : '');
+  const calBorder = cd.calColor ? `border-left:3px solid ${cd.calColor};` : (cd.gcalUid ? 'border-left:3px solid rgba(109,191,154,.5);' : cd.pinned ? 'border-left:2px solid var(--accent);' : '');
+  const pinBadge = cd.pinned ? `<span title="Angepinnt" style="font-size:10px;opacity:.7">📌</span>` : '';
+  const repeatBadge = cd.repeat ? `<span class="recur-badge" title="Wiederkehrend">${cd.repeat==='yearly'?'↻ Jahr':cd.repeat==='monthly'?'↻ Mon':'↻ Woche'}</span>` : '';
   return `<div class="list-item ${cd.id===activeCountdownId?'active':''}" id="li-${cd.id}" draggable="true" data-id="${cd.id}" style="${calBorder}"
     ondragstart="onDragStart(event,'${cd.id}')" ondragover="onDragOver(event,'${cd.id}')" ondrop="onDrop(event,'${cd.id}')" ondragleave="onDragLeave(event)" ondragend="onDragEnd()"
     onclick="selectCountdown('${cd.id}')">
@@ -2150,7 +2187,7 @@ function cdItemHtml(cd){
     <div class="list-item-top">
       <div class="list-item-emoji">${cd.emoji}</div>
       <div class="list-item-body">
-        <div class="list-item-name">${cd.name}</div>
+        <div class="list-item-name">${cd.name}${pinBadge}${repeatBadge}</div>
         <div class="list-item-countdown ${isPast?'past':''}">${label}</div>
         <div class="list-item-meta">${fmtDate(cd.date)}${!cd.allDay&&cd.time?' · '+cd.time:''}</div>
         ${catPill}
@@ -2323,6 +2360,7 @@ function renderCdDetail(id){
   const roomBtn = cd._live
     ? '<button class="edit-btn" style="color:var(--green)" onclick="openShareModal(\''+cd.id+'\');setTimeout(()=>switchShareTab(\'live\',document.querySelector(\'.share-tab:last-child\')),50)">🌐 Online</button>'
     : '<button class="edit-btn" onclick="openShareModal(\''+cd.id+'\')">↑ Teilen</button>';
+  const pinBtn = `<button class="edit-btn" onclick="togglePin('${cd.id}')" title="${cd.pinned?'Loslösen':'Anpinnen'}">${cd.pinned?'📌 Angepinnt':'📌 Anpinnen'}</button>`;
   const excNote = cd.exclude?.length ? ' · '+cd.exclude.length+' Ausschlüsse' : '';
   const incNote = cd.include?.length ? ' · '+cd.include.length+' Einschlüsse' : '';
   document.getElementById('mainContent').innerHTML=`
@@ -2335,6 +2373,7 @@ function renderCdDetail(id){
       </div>
       <div class="header-actions">
         ${roomBtn}
+        ${pinBtn}
         <button class="edit-btn" onclick="openModal('${cd.id}')">✎ Bearbeiten</button>
       </div>
     </div>
@@ -2363,13 +2402,139 @@ function renderCdDetail(id){
   }
 }
 
-function delCd(e,id){
-  e.stopPropagation();
-  if(liveTimer){clearInterval(liveTimer);liveTimer=null;}
-  countdowns=countdowns.filter(c=>c.id!==id); deleteCdWithSync(id);
-  if(activeCountdownId===id){activeCountdownId=null;showCdWelcome();}
-  renderList();
+// ═══════════════ UNDO / TOAST ═══════════════
+let _undoStack = null, _toastTimer = null;
+function showToast(msg, undoFn){
+  const bar = document.getElementById('toastBar');
+  const msgEl = document.getElementById('toastMsg');
+  const undoBtn = document.getElementById('toastUndoBtn');
+  msgEl.textContent = msg;
+  undoBtn.style.display = undoFn ? 'block' : 'none';
+  _undoStack = undoFn || null;
+  bar.classList.add('show');
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(()=>{ bar.classList.remove('show'); _undoStack=null; }, 4000);
 }
+function undoDelete(){
+  if(_undoStack){ _undoStack(); _undoStack=null; }
+  document.getElementById('toastBar').classList.remove('show');
+  clearTimeout(_toastTimer);
+}
+
+function delCd(e, id){
+  e.stopPropagation();
+  if(liveTimer){ clearInterval(liveTimer); liveTimer=null; }
+  const cd = countdowns.find(c=>c.id===id);
+  const snapshot = cd ? {...cd} : null;
+  const wasActive = activeCountdownId === id;
+  countdowns = countdowns.filter(c=>c.id!==id);
+  deleteCdWithSync(id);
+  if(wasActive){ activeCountdownId=null; showCdWelcome(); }
+  renderList();
+  showToast(`"${snapshot?.name||'Countdown'}" gelöscht`, snapshot ? ()=>{
+    countdowns.unshift(snapshot);
+    saveCdWithSync(snapshot);
+    renderList();
+    selectCountdown(snapshot.id);
+  } : null);
+}
+
+// ═══════════════ PINS ═══════════════
+function togglePin(id){
+  const cd = countdowns.find(c=>c.id===id); if(!cd) return;
+  cd.pinned = !cd.pinned;
+  saveCdWithSync(cd);
+  renderList();
+  renderCdDetail(id);
+}
+
+// ═══════════════ RECURRING ═══════════════
+// Called on renderList/init: advance past recurring countdowns
+function advanceRecurring(){
+  const today = ds(new Date());
+  let changed = false;
+  countdowns.forEach(cd=>{
+    if(!cd.repeat || cd.date >= today) return;
+    const orig = new Date(cd.date+'T00:00:00');
+    let next = new Date(orig);
+    // Advance until future
+    while(ds(next) <= today){
+      if(cd.repeat==='yearly')  next.setFullYear(next.getFullYear()+1);
+      else if(cd.repeat==='monthly') next.setMonth(next.getMonth()+1);
+      else if(cd.repeat==='weekly')  next.setDate(next.getDate()+7);
+      else break;
+    }
+    cd.date = ds(next);
+    changed = true;
+    saveCdWithSync(cd);
+  });
+  if(changed) renderList();
+}
+
+// ═══════════════ NOTIFICATIONS ═══════════════
+async function requestNotifPermission(){
+  if(!('Notification' in window)) return false;
+  if(Notification.permission === 'granted') return true;
+  const perm = await Notification.requestPermission();
+  return perm === 'granted';
+}
+function checkNotifications(){
+  if(!('Notification' in window) || Notification.permission !== 'granted') return;
+  const today = ds(new Date());
+  countdowns.forEach(cd=>{
+    if(!cd.notify) return;
+    const daysUntil = cd.notifyDays ?? 7;
+    const tgt = new Date(cd.date+'T00:00:00');
+    const notifyDate = new Date(tgt); notifyDate.setDate(notifyDate.getDate() - daysUntil);
+    const notifyStr = ds(notifyDate);
+    if(notifyStr !== today) return;
+    const alreadyKey = 'cs4_notif_'+cd.id+'_'+notifyStr;
+    if(localStorage.getItem(alreadyKey)) return;
+    localStorage.setItem(alreadyKey, '1');
+    const {count} = countDays(cd.date, cd.mode, cd.wdays, cd.exclude||[], cd.include||[], null);
+    new Notification(`${cd.emoji} ${cd.name}`, {
+      body: count === 0 ? 'Heute ist es so weit!' : `Noch ${count} Tag${count===1?'':'e'}`,
+      icon: APP_LOGO || undefined,
+      tag: cd.id
+    });
+  });
+}
+
+// ═══════════════ OFFLINE INDICATOR ═══════════════
+function setOnlineState(online){
+  const dot = document.querySelector('.sync-dot');
+  if(!dot) return;
+  if(!online){ dot.classList.remove('on'); dot.classList.add('offline'); dot.title='Offline'; }
+  else if(window.fbUser){ dot.classList.remove('offline'); dot.classList.add('on'); dot.title='Sync aktiv'; }
+}
+window.addEventListener('online',  ()=>setOnlineState(true));
+window.addEventListener('offline', ()=>setOnlineState(false));
+
+// ═══════════════ KEYBOARD SHORTCUTS ═══════════════
+document.addEventListener('keydown', e=>{
+  // Don't fire when typing in inputs
+  if(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA'||e.target.tagName==='SELECT') return;
+  if(e.metaKey||e.ctrlKey||e.altKey) return;
+  switch(e.key){
+    case 'n': case 'N':
+      e.preventDefault(); handleNewBtn(); break;
+    case 'e': case 'E':
+      if(activeCountdownId){ e.preventDefault(); openModal(activeCountdownId); } break;
+    case 'p': case 'P':
+      if(activeCountdownId){ e.preventDefault(); togglePin(activeCountdownId); } break;
+    case 'Delete': case 'Backspace':
+      // Backspace only with Shift to avoid accidents
+      if(e.key==='Delete'||e.shiftKey){
+        if(activeCountdownId && e.target===document.body){ e.preventDefault(); delCd({stopPropagation:()=>{}}, activeCountdownId); }
+      } break;
+    case 'Escape':
+      // Close any open modal
+      document.querySelectorAll('.modal-overlay.open').forEach(m=>m.classList.remove('open'));
+      break;
+    case 'z': case 'Z':
+      if(_undoStack){ e.preventDefault(); undoDelete(); } break;
+  }
+});
 
 // ═══════════════ TRACKER ═══════════════
 function renderTrackerList(){
@@ -2560,12 +2725,22 @@ function openModal(editId){
     if(cd.exclude?.length){document.getElementById('togExclude').classList.add('on');document.getElementById('secExclude').classList.add('visible');setTimeout(()=>dpInit('dpExclude','fExclude'),0);}
     if(cd.include?.length){document.getElementById('togInclude').classList.add('on');document.getElementById('secInclude').classList.add('visible');}
     if(cd.start){document.getElementById('togStart').classList.add('on');document.getElementById('secStart').classList.add('visible');}
+    // New fields
+    document.getElementById('fPinned').checked = cd.pinned||false;
+    document.getElementById('fRepeat').value = cd.repeat||'';
+    document.getElementById('fNotify').checked = cd.notify||false;
+    document.getElementById('fNotifyDays').value = cd.notifyDays??7;
+    document.getElementById('fNotifyWrap').style.display = cd.notify?'block':'none';
   } else {
     document.getElementById('fName').value=''; document.getElementById('fDate').value=''; document.getElementById('fTime').value='00:00'; document.getElementById('fAllDay').checked=true;
     document.getElementById('fExclude').value=''; excSelectedDates=new Set(); excMonth=new Date(); document.getElementById('fInclude').value=''; document.getElementById('fStart').value='';
     fEmoji='🎉'; fMode='all'; fWdays=new Set([1,2,3,4,5]); fCatSelected=null; populateCatSelect(null);
     ['togExclude','togInclude','togStart'].forEach(i=>document.getElementById(i).classList.remove('on'));
     ['secExclude','secInclude','secStart'].forEach(i=>document.getElementById(i).classList.remove('visible'));
+    document.getElementById('fPinned').checked=false;
+    document.getElementById('fRepeat').value='';
+    document.getElementById('fNotify').checked=false;
+    document.getElementById('fNotifyWrap').style.display='none';
   }
   toggleAllDay();
   document.querySelectorAll('.emoji-btn').forEach(b=>b.classList.toggle('selected',b.dataset.emoji===fEmoji));
@@ -2591,6 +2766,7 @@ function saveCountdown(){
   if(!date){document.getElementById('fDate').focus();return;}
   const allDay=document.getElementById('fAllDay').checked;
   const parseDates=raw=>raw.split('\n').map(s=>s.trim()).filter(s=>/^\d{4}-\d{2}-\d{2}$/.test(s));
+  const notify = document.getElementById('fNotify').checked;
   const cd={
     id:editCdId||(Date.now().toString(36)+Math.random().toString(36).slice(2)),
     name,emoji:fEmoji,date,allDay,time:allDay?null:document.getElementById('fTime').value,
@@ -2599,9 +2775,14 @@ function saveCountdown(){
     include:document.getElementById('togInclude').classList.contains('on')?parseDates(document.getElementById('fInclude').value):[],
     start:document.getElementById('togStart').classList.contains('on')&&document.getElementById('fStart').value?document.getElementById('fStart').value:null,
     cat:document.getElementById('fCatSelect').value||null,
+    pinned: document.getElementById('fPinned').checked || false,
+    repeat: document.getElementById('fRepeat').value || null,
+    notify: notify,
+    notifyDays: notify ? parseInt(document.getElementById('fNotifyDays').value)||7 : null,
     gcalUid:editCdId?(countdowns.find(c=>c.id===editCdId)?.gcalUid||null):null,
     created:editCdId?(countdowns.find(c=>c.id===editCdId)?.created||Date.now()):Date.now()
   };
+  if(notify) requestNotifPermission();
   if(editCdId){
     const i=countdowns.findIndex(c=>c.id===editCdId);
     if(i>=0){ countdowns[i]=cd; saveCdWithSync(cd); }
@@ -2780,122 +2961,116 @@ function drawShareCard(cd) {
   if (!canvas) return;
   const ctx = canvas.getContext('2d');
 
-  // 2× retina, logical size 480×240
-  const W = 480, H = 240, S = 2;
+  const W = 380, H = 170, S = 2;
   canvas.width = W*S; canvas.height = H*S;
   canvas.style.width = W+'px'; canvas.style.height = H+'px';
   ctx.scale(S, S);
 
   const { count, isPast } = countDays(cd.date, cd.mode, cd.wdays, cd.exclude||[], cd.include||[], cd.start);
   const isLight = cardConfig.isLight;
+  const accent = ({
+    red:['#c44a2a','#f0a882'], amber:['#c97d20','#f0b870'],
+    green:['#3a9e6a','#80d4a8'], blue:['#2e6fd4','#80b0f0'],
+  })[cardConfig.accent] || ['#c44a2a','#f0a882'];
 
-  const accentPalettes = {
-    red:   ['#c44a2a','#f0a882'],
-    amber: ['#c97d20','#f0b870'],
-    green: ['#3a9e6a','#80d4a8'],
-    blue:  ['#2e6fd4','#80b0f0'],
-  };
-  const accent = accentPalettes[cardConfig.accent] || accentPalettes.red;
+  const [bgA,bgB] = ([
+    isLight?['#f5f0ed','#e8ddd5']:['#120a08','#1f0e0a'],
+    isLight?['#fdf0e8','#f0ddd0']:['#130e06','#221408'],
+    isLight?['#eaf0f8','#d8e8f4']:['#080e14','#0c1620'],
+    isLight?['#f0f0f0','#e0e0e0']:['#0e0e0e','#1c1c1c'],
+  ])[cardConfig.grad||0];
 
-  const gradDefs = isLight
-    ? [['#f5f0ed','#e8ddd5'],['#fdf0e8','#f0ddd0'],['#eaf0f8','#d8e8f4'],['#f0f0f0','#e0e0e0']]
-    : [['#120a08','#1f0e0a'],['#130e06','#221408'],['#080e14','#0c1620'],['#0e0e0e','#1c1c1c']];
-  const [bgA, bgB] = gradDefs[cardConfig.grad] || gradDefs[0];
-
-  // ── Background ──
+  // Background
   const bg = ctx.createLinearGradient(0,0,W,H);
-  bg.addColorStop(0, bgA); bg.addColorStop(1, bgB);
-  ctx.fillStyle = bg;
-  ctx.beginPath(); roundRect(ctx,0,0,W,H,16); ctx.fill();
+  bg.addColorStop(0,bgA); bg.addColorStop(1,bgB);
+  ctx.fillStyle=bg; ctx.beginPath(); roundRect(ctx,0,0,W,H,14); ctx.fill();
 
-  // ── Glow blob ──
-  const glow = ctx.createRadialGradient(W*0.82, H*0.3, 0, W*0.82, H*0.3, 180);
-  glow.addColorStop(0, accent[0]+'30'); glow.addColorStop(1, 'transparent');
-  ctx.fillStyle = glow;
-  ctx.beginPath(); roundRect(ctx,0,0,W,H,16); ctx.fill();
+  // Glow top-right
+  const glow=ctx.createRadialGradient(W*0.82,H*0.2,0,W*0.82,H*0.2,180);
+  glow.addColorStop(0,accent[0]+'26'); glow.addColorStop(1,'transparent');
+  ctx.fillStyle=glow; ctx.beginPath(); roundRect(ctx,0,0,W,H,14); ctx.fill();
 
-  // ── Subtle shiny border ──
-  ctx.save();
-  ctx.beginPath(); roundRect(ctx,0.6,0.6,W-1.2,H-1.2,15.5);
-  ctx.strokeStyle = isLight ? 'rgba(255,255,255,0.6)' : 'rgba(255,255,255,0.09)';
-  ctx.lineWidth = 1.2; ctx.stroke();
-  ctx.restore();
+  // Border
+  ctx.save(); ctx.beginPath(); roundRect(ctx,0.7,0.7,W-1.4,H-1.4,13.5);
+  ctx.strokeStyle=isLight?'rgba(255,255,255,0.55)':'rgba(255,255,255,0.08)';
+  ctx.lineWidth=1.2; ctx.stroke(); ctx.restore();
 
-  // ── Layout constants ──
-  const PAD = 26;
-  const RIGHT = W - PAD;
-  const COL = W * 0.54; // left/right split
+  const PAD=22, RIGHT=W-PAD;
+  const dim   = isLight?'#a09080':'#5a3a32';
+  const textC = isLight?'#1a0f0a':'#f5ede8';
+  const subC  = isLight?'#8a7060':'#9a6a5e';
 
-  // ── App name ──  Y=20
-  ctx.font = '600 9px "Plus Jakarta Sans", sans-serif';
-  ctx.fillStyle = isLight ? '#a09080' : '#6a4a42';
-  ctx.textAlign = 'left';
-  ctx.fillText(APP_NAME.toUpperCase(), PAD, 20);
+  // All Y positions relative to H so content fills the card
+  const SUB_Y  = H - 14;          // URL + mode pinned near bottom
+  const BAR_Y  = SUB_Y - 4 - 12;  // bar just above sub-row
+  const BAR_H  = 4, BAR_R = 2, BAR_W = RIGHT - PAD;
 
-  // ── Emoji ──  Y=50 baseline
-  ctx.font = '28px serif';
-  ctx.fillText(cd.emoji, PAD, 54);
+  // App name — top
+  ctx.font='600 9px "Plus Jakarta Sans",sans-serif';
+  ctx.fillStyle=dim; ctx.textAlign='left';
+  ctx.fillText(APP_NAME.toUpperCase(), PAD, 18);
 
-  // ── Title ──  Y=76 baseline
-  ctx.font = 'bold 20px "Plus Jakarta Sans", sans-serif';
-  ctx.fillStyle = isLight ? '#1a0f0a' : '#f5ede8';
-  const maxTitleW = COL - PAD - 8;
-  let title = cd.name;
-  while(ctx.measureText(title).width > maxTitleW && title.length > 2) title = title.slice(0,-1);
-  if(title !== cd.name) title = title.trimEnd() + '…';
-  ctx.fillText(title, PAD, 80);
+  // Spread content block between Y=32 and BAR_Y-16
+  const contentTop = 32;
+  const contentBot = BAR_Y - 16;
+  const contentH   = contentBot - contentTop;  // available for emoji+title+date
 
-  // ── Date ──  Y=96 baseline
-  ctx.font = '500 11px "Plus Jakarta Sans", sans-serif';
-  ctx.fillStyle = isLight ? '#8a7060' : '#a87a6e';
-  ctx.fillText(fmtDate(cd.date), PAD, 96);
+  const LEFT_W = W*0.55 - PAD;
 
-  // ── Big number (right column, right-aligned to RIGHT) ──
-  const numStr = String(count);
-  ctx.font = 'bold 72px "Plus Jakarta Sans", sans-serif';
-  const numGrad = ctx.createLinearGradient(COL,0,RIGHT,0);
-  numGrad.addColorStop(0, accent[1]); numGrad.addColorStop(1, accent[0]);
-  ctx.fillStyle = numGrad;
-  ctx.textAlign = 'right';
-  ctx.fillText(numStr, RIGHT, 116);
+  // Emoji
+  ctx.font='22px serif';
+  ctx.fillText(cd.emoji, PAD, contentTop + contentH * 0.18);
 
-  // ── "TAGE NOCH" — same Y as date (96), left-aligned at number's left edge ──
-  const numW = ctx.measureText(numStr).width;
-  const numLeft = RIGHT - numW;
-  ctx.font = 'bold 9px "Plus Jakarta Sans", sans-serif';
-  ctx.fillStyle = isLight ? '#a09080' : '#7a5a52';
-  ctx.textAlign = 'left';
-  ctx.fillText(isPast ? 'TAGE' : 'TAGE', numLeft, 90);
-  ctx.fillText(isPast ? 'VERGANGEN' : 'NOCH', numLeft, 100);
+  // Title
+  ctx.font='bold 16px "Plus Jakarta Sans",sans-serif';
+  ctx.fillStyle=textC;
+  let title=cd.name;
+  while(ctx.measureText(title).width>LEFT_W && title.length>2) title=title.slice(0,-1);
+  if(title!==cd.name) title=title.trimEnd()+'…';
+  ctx.fillText(title, PAD, contentTop + contentH * 0.52);
 
-  // ── Progress bar ──  Y=136
-  const BAR_Y = 136, BAR_H = 4, BAR_R = 2;
-  const today0 = new Date(); today0.setHours(0,0,0,0);
-  const target0 = new Date(cd.date+'T00:00:00'); target0.setHours(0,0,0,0);
-  let startAnchor;
-  if(cd.start){ startAnchor=new Date(cd.start+'T00:00:00'); startAnchor.setHours(0,0,0,0); }
-  else if(cd.created){ startAnchor=new Date(cd.created); startAnchor.setHours(0,0,0,0); }
-  else { startAnchor=new Date(target0); startAnchor.setDate(startAnchor.getDate()-30); }
-  const totalMs = target0-startAnchor;
-  const elapsedMs = today0-startAnchor;
-  const pct = totalMs<=0?(isPast?1:0):isPast?1:Math.min(1,Math.max(0,elapsedMs/totalMs));
+  // Date
+  ctx.font='500 10px "Plus Jakarta Sans",sans-serif';
+  ctx.fillStyle=subC;
+  ctx.fillText(fmtDate(cd.date), PAD, contentTop + contentH * 0.80);
 
-  ctx.fillStyle = isLight ? '#ddd4cc' : '#3a1a12';
-  roundRect(ctx, PAD, BAR_Y, RIGHT-PAD, BAR_H, BAR_R); ctx.fill();
+  // Number — vertically centered in content block, right-aligned
+  const digits=String(count).length;
+  const numSize = digits<=1?50:digits===2?44:digits===3?36:28;
+  const numStr=String(count);
+  ctx.font=`bold ${numSize}px "Plus Jakarta Sans",sans-serif`;
+  const numGrad=ctx.createLinearGradient(W*0.52,0,RIGHT,0);
+  numGrad.addColorStop(0,accent[1]); numGrad.addColorStop(1,accent[0]);
+  ctx.fillStyle=numGrad; ctx.textAlign='right';
+  ctx.fillText(numStr, RIGHT, contentTop + contentH * 0.62);
+
+  // TAGE NOCH — just below number
+  ctx.font='bold 7.5px "Plus Jakarta Sans",sans-serif';
+  ctx.fillStyle=dim;
+  ctx.fillText(isPast?'TAGE VERGANGEN':'TAGE NOCH', RIGHT, contentTop + contentH * 0.62 + 13);
+  const t0=new Date(); t0.setHours(0,0,0,0);
+  const tgt=new Date(cd.date+'T00:00:00'); tgt.setHours(0,0,0,0);
+  let sa;
+  if(cd.start){sa=new Date(cd.start+'T00:00:00');sa.setHours(0,0,0,0);}
+  else if(cd.created){sa=new Date(cd.created);sa.setHours(0,0,0,0);}
+  else{sa=new Date(tgt);sa.setDate(sa.getDate()-30);}
+  const pct=(tgt-sa)<=0?(isPast?1:0):isPast?1:Math.min(1,Math.max(0,(t0-sa)/(tgt-sa)));
+
+  ctx.fillStyle=isLight?'#ddd4cc':'#3a1a12';
+  roundRect(ctx,PAD,BAR_Y,BAR_W,BAR_H,BAR_R); ctx.fill();
   if(pct>0){
-    const barGrad = ctx.createLinearGradient(PAD,0,RIGHT,0);
-    barGrad.addColorStop(0,accent[0]); barGrad.addColorStop(1,accent[1]);
-    ctx.fillStyle = barGrad;
-    roundRect(ctx, PAD, BAR_Y, Math.max(BAR_R*2,(RIGHT-PAD)*pct), BAR_H, BAR_R); ctx.fill();
+    const bg2=ctx.createLinearGradient(PAD,0,PAD+BAR_W,0);
+    bg2.addColorStop(0,accent[0]); bg2.addColorStop(1,accent[1]);
+    ctx.fillStyle=bg2;
+    roundRect(ctx,PAD,BAR_Y,Math.max(BAR_R*2,BAR_W*pct),BAR_H,BAR_R); ctx.fill();
   }
 
-  // ── Sub-bar row ──  Y=152
-  const SUB_Y = BAR_Y + BAR_H + 12;
-  ctx.font = '500 9px "Plus Jakarta Sans", sans-serif';
-  ctx.fillStyle = isLight ? '#a09080' : '#6a4a42';
-  ctx.textAlign = 'left';
-  ctx.fillText(fmtMode(cd.mode, cd.wdays) + ' · ' + Math.round(pct*100) + '%', PAD, SUB_Y);
-  ctx.textAlign = 'right';
+  // Sub-bar row — pinned to bottom
+  ctx.font='500 9px "Plus Jakarta Sans",sans-serif';
+  ctx.fillStyle=dim;
+  ctx.textAlign='left';
+  ctx.fillText(fmtMode(cd.mode,cd.wdays)+' · '+Math.round(pct*100)+'%', PAD, SUB_Y);
+  ctx.textAlign='right';
   ctx.fillText('tinyurl.com/countdownstudio', RIGHT, SUB_Y);
 }
 
@@ -3397,13 +3572,24 @@ function dismissChangelog(){
 
 applyTheme();
 applyBranding();
+advanceRecurring(); // advance any recurring countdowns past their date
 renderList();
 if(currentRoom) subscribeRoom(currentRoom.code);
 countdowns.filter(c=>c._live&&c._roomCode).forEach(c=>_startLiveListener(c.id,c._roomCode));
 renderTrackerList();
 if(countdowns.length) selectCountdown(countdowns[0].id);
 setTimeout(checkChangelog, 2500);
+setTimeout(checkNotifications, 3000);
+// Daily check for recurring + notifications
+setInterval(advanceRecurring, 3600000);
+setInterval(checkNotifications, 3600000);
 </script>
+<!-- ── TOAST ── -->
+<div id="toastBar">
+  <span id="toastMsg"></span>
+  <button class="toast-undo" id="toastUndoBtn" style="display:none" onclick="undoDelete()">Rückgängig</button>
+</div>
+
 <!-- ── CHANGELOG POPUP ── -->
 <div class="modal-overlay" id="changelogModal" style="z-index:600;display:none">
   <div class="modal" style="max-width:440px">
