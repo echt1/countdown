@@ -593,8 +593,17 @@ body::after{content:'';position:fixed;inset:0;background:radial-gradient(ellipse
 
 /* Share card canvas overlay */
 .share-card-wrap{text-align:center;}
-/* Toast */
-#toastBar{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--surface2);border:1px solid var(--border2);color:var(--text);padding:10px 16px;border-radius:10px;font-size:13px;display:flex;align-items:center;gap:10px;z-index:900;transition:transform .25s cubic-bezier(.34,1.56,.64,1);box-shadow:0 4px 20px rgba(0,0,0,.4);white-space:nowrap;}
+/* Easter Egg: Custom accent */
+.accent-custom-wrap{display:none;align-items:center;gap:8px;margin-top:6px;}
+.accent-custom-wrap.unlocked{display:flex;}
+#accentCustomSwatch{width:28px;height:28px;border-radius:50%;border:2px solid var(--border2);cursor:pointer;padding:0;background:var(--accent);}
+/* Easter Egg: Slot machine */
+@keyframes slotSpin{0%{transform:translateY(0)}20%{transform:translateY(-8px)}40%{transform:translateY(4px)}60%{transform:translateY(-4px)}80%{transform:translateY(2px)}100%{transform:translateY(0)}}
+.slot-spin{animation:slotSpin .12s ease-in-out 3;}
+/* Easter Egg: unlock flash */
+@keyframes unlockFlash{0%{opacity:0;transform:scale(.8)}50%{opacity:1;transform:scale(1.05)}100%{opacity:0;transform:scale(1)}}
+#easterEggFlash{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:9999;pointer-events:none;opacity:0;}
+#easterEggFlash.show{animation:unlockFlash .8s ease forwards;}position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--surface2);border:1px solid var(--border2);color:var(--text);padding:10px 16px;border-radius:10px;font-size:13px;display:flex;align-items:center;gap:10px;z-index:900;transition:transform .25s cubic-bezier(.34,1.56,.64,1);box-shadow:0 4px 20px rgba(0,0,0,.4);white-space:nowrap;}
 #toastBar.show{transform:translateX(-50%) translateY(0);}
 #toastBar .toast-undo{background:var(--accent);color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;}
 .list-item.pinned-item{border-left:2px solid var(--accent);}
@@ -661,7 +670,7 @@ canvas#shareCardCanvas{border-radius:12px;max-width:100%;height:auto;display:blo
   <div class="sidebar" id="sidebar">
     <div class="sidebar-resize" id="sidebarResize"></div>
     <div class="sidebar-header">
-      <div class="logo" id="logoWrap">
+      <div class="logo" id="logoWrap" onclick="_logoClick()" style="cursor:default">
         <div class="logo-default" id="logoDefault">
           <div class="logo-icon">⏳</div>
           <span class="logo-text" id="logoText">Countdown Studio</span>
@@ -1039,6 +1048,11 @@ canvas#shareCardCanvas{border-radius:12px;max-width:100%;height:auto;display:blo
         <button class="theme-btn accent-btn" data-accent="amber" onclick="setAccent('amber')">🟡 Amber</button>
         <button class="theme-btn accent-btn" data-accent="green" onclick="setAccent('green')">🟢 Grün</button>
         <button class="theme-btn accent-btn" data-accent="blue" onclick="setAccent('blue')">🔵 Blau</button>
+      </div>
+      <div class="accent-custom-wrap" id="accentCustomWrap">
+        <input type="color" id="accentCustomPicker" value="#a855f7" oninput="setCustomAccent(this.value)" style="width:28px;height:28px;border-radius:50%;border:2px solid var(--border2);cursor:pointer;padding:2px;background:none;">
+        <span style="font-size:11px;color:var(--tm)">✨ Eigene Farbe</span>
+        <button class="theme-btn accent-btn" data-accent="custom" id="accentCustomBtn" onclick="setAccent('custom')" style="font-size:10px;padding:4px 8px">Aktivieren</button>
       </div>
     </div>
     <div class="settings-section" style="margin-top:14px">
@@ -1892,31 +1906,157 @@ function stopQrScanner(){
 
 
 // ═══════════════ THEME ═══════════════
+// ── Easter Egg: Logo click → Slot Machine ──
+let _logoClickCount = 0, _logoClickTimer = null;
+function _logoClick(){
+  clearTimeout(_logoClickTimer);
+  _logoClickCount++;
+  _logoClickTimer = setTimeout(()=>{ _logoClickCount=0; }, 1500);
+  if(_logoClickCount >= 10){ _logoClickCount=0; _triggerSlotMachine(); }
+}
+
+// ── Easter Egg: Custom Color (10× Light) ──
+let _lightClickCount = 0, _lightClickTimer = null;
+let _darkClickCount  = 0, _darkClickTimer  = null;
+
 function setTheme(theme){
   document.documentElement.dataset.theme = theme;
   settings.theme = theme; saveSett();
   updateThemeBtns();
-  applyBranding(); // swap logo for light/dark
+  applyBranding();
+
+  // Easter Egg B: 10× Light → custom color picker
+  if(theme === 'light'){
+    clearTimeout(_lightClickTimer);
+    _lightClickCount++;
+    _lightClickTimer = setTimeout(()=>{ _lightClickCount=0; }, 1800);
+    if(_lightClickCount >= 10){ _lightClickCount=0; _unlockCustomAccent(); }
+  }
 }
+
+function _unlockCustomAccent(){
+  if(settings._easterEggColor) return;
+  settings._easterEggColor = true; saveSett();
+  document.getElementById('accentCustomWrap').classList.add('unlocked');
+  // subtle toast instead of flash
+  showToast('🎨 Geheimes Feature freigeschaltet! Eigene Akzentfarbe ✨', null);
+}
+
+let _slotActive = false;
+function _triggerSlotMachine(){
+  if(_slotActive) return;
+  _slotActive = true;
+
+  document.getElementById('settingsModal').classList.remove('open');
+
+  const DURATION = 3000;
+  const start = Date.now();
+  const slots = '0123456789';
+
+  function getNumEls(){
+    const els = [...document.querySelectorAll('.stat-val')];
+    // The big countdown number
+    document.querySelectorAll('.counter-number').forEach(el=>els.push(el));
+    return els;
+  }
+
+  const originals = new Map();
+  const origStyles = new Map();
+  getNumEls().forEach(el=>{
+    originals.set(el, el.textContent);
+    // For gradient-clipped elements, temporarily make text visible
+    if(el.classList.contains('counter-number')){
+      origStyles.set(el, {fill: el.style.webkitTextFillColor, color: el.style.color});
+      el.style.webkitTextFillColor = 'var(--accent)';
+      el.style.color = 'var(--accent)';
+    }
+  });
+
+  const main = document.getElementById('mainContent');
+  if(main) main.style.transition = 'transform .05s';
+
+  let shakeDir = 1;
+  const shakeIv = setInterval(()=>{
+    if(main){ main.style.transform = `translateX(${shakeDir*3}px)`; shakeDir*=-1; }
+  }, 60);
+
+  const spinIv = setInterval(()=>{
+    getNumEls().forEach(el=>{
+      const orig = originals.get(el) || el.textContent;
+      el.textContent = orig.replace(/\d/g, ()=>slots[Math.floor(Math.random()*10)]);
+    });
+
+    if(Date.now() - start >= DURATION){
+      clearInterval(spinIv);
+      clearInterval(shakeIv);
+      getNumEls().forEach(el=>{
+        if(originals.has(el)) el.textContent = originals.get(el);
+        if(origStyles.has(el)){
+          const s = origStyles.get(el);
+          el.style.webkitTextFillColor = s.fill;
+          el.style.color = s.color;
+        }
+      });
+      if(main){ main.style.transform = ''; main.style.transition = ''; }
+      _slotActive = false;
+    }
+  }, 80);
+}
+
+function setCustomAccent(hex){
+  settings._customAccentHex = hex; saveSett();
+  if(settings.accent === 'custom') _applyCustomAccent(hex);
+}
+
+function _applyCustomAccent(hex){
+  // Convert hex to RGB for CSS variable
+  const r=parseInt(hex.slice(1,3),16), g=parseInt(hex.slice(3,5),16), b=parseInt(hex.slice(5,7),16);
+  // Derive light variant (lighten by mixing with white)
+  const lr = Math.round(r + (255-r)*.45), lg = Math.round(g + (255-g)*.45), lb = Math.round(b + (255-b)*.45);
+  const light = `#${lr.toString(16).padStart(2,'0')}${lg.toString(16).padStart(2,'0')}${lb.toString(16).padStart(2,'0')}`;
+  document.documentElement.style.setProperty('--accent', hex);
+  document.documentElement.style.setProperty('--al', hex);
+  document.documentElement.style.setProperty('--ap', light);
+}
+
 function setAccent(accent){
   document.documentElement.dataset.accent = accent;
   settings.accent = accent; saveSett();
+  if(accent === 'custom' && settings._customAccentHex){
+    _applyCustomAccent(settings._customAccentHex);
+  } else {
+    // Clear any custom CSS vars so dataset accent takes over
+    document.documentElement.style.removeProperty('--accent');
+    document.documentElement.style.removeProperty('--al');
+    document.documentElement.style.removeProperty('--ap');
+  }
   updateThemeBtns();
 }
+
 function updateThemeBtns(){
   const curTheme  = settings.theme  || '';
   const curAccent = settings.accent || '';
   document.querySelectorAll('.theme-btn').forEach(b=>{
     if(b.classList.contains('accent-btn')){
       b.classList.toggle('active', b.dataset.accent === curAccent);
-    } else {
+    } else if(b.dataset.theme !== undefined){
       b.classList.toggle('active', b.dataset.theme === curTheme);
     }
   });
+  // Show custom wrap if unlocked
+  const wrap = document.getElementById('accentCustomWrap');
+  if(wrap && settings._easterEggColor) wrap.classList.add('unlocked');
+  // Sync color picker value
+  const picker = document.getElementById('accentCustomPicker');
+  if(picker && settings._customAccentHex) picker.value = settings._customAccentHex;
 }
+
 function applyTheme(){
   document.documentElement.dataset.theme  = settings.theme  || '';
   document.documentElement.dataset.accent = settings.accent || '';
+  if(settings.accent === 'custom' && settings._customAccentHex){
+    _applyCustomAccent(settings._customAccentHex);
+  }
 }
 
 // ═══════════════ BRANDING (edit APP_NAME / APP_LOGO at top of script) ═══════════════
@@ -3513,14 +3653,26 @@ function copyEmbedCode(){
 setInterval(()=>{renderList();renderTrackerList();},60000);
 
 // ═══════════════ CHANGELOG ═══════════════
+function _versionGt(a, b){
+  // Compare version strings like "0.9", "0.10", "1.0" numerically
+  const pa = String(a).split('.').map(Number);
+  const pb = String(b).split('.').map(Number);
+  const len = Math.max(pa.length, pb.length);
+  for(let i=0; i<len; i++){
+    const na = pa[i]||0, nb = pb[i]||0;
+    if(na > nb) return true;
+    if(na < nb) return false;
+  }
+  return false; // equal
+}
+
 function checkChangelog(){
   if(!window.fbCheckChangelog) return;
   window.fbCheckChangelog((data)=>{
-    // Only hide button if explicitly set to false — don't hide on null/error
     if(data && data.visible === false){ _updateNewsBtn(false); return; }
     if(!data || !data.version) return;
     const seen = localStorage.getItem('cs4_changelog_seen') || '0';
-    if(String(data.version) <= String(seen)) return;
+    if(!_versionGt(data.version, seen)) return; // already seen this version or older
     _showChangelogPopup(data);
   });
 }
