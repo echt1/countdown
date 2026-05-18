@@ -33,7 +33,19 @@ const gprov  = new GoogleAuthProvider();
 let unsubCd = null, unsubTr = null; // Firestore listeners
 
 // ── Sign in / out ──────────────────────────────────────────
-window.fbSignIn  = () => signInWithPopup(auth, gprov).catch(e => alert('Login fehlgeschlagen: ' + e.message));
+window.fbSignIn = () => {
+  // In Electron, Google Sign-In popup works but needs the domain to be authorized
+  // in Firebase Console: Authentication → Authorized domains → add the domain shown in errors
+  signInWithPopup(auth, gprov).catch(e => {
+    if(e.code === 'auth/popup-blocked' || e.code === 'auth/cancelled-popup-request'){
+      alert('Popup wurde blockiert.\n\nFix: In der Firebase Console unter Authentication → Authorized domains\n"localhost" hinzufügen, dann neu starten.');
+    } else if(e.code === 'auth/unauthorized-domain'){
+      alert('Domain nicht autorisiert.\n\nFix: In der Firebase Console unter Authentication → Authorized domains\ndiese Domain hinzufügen: ' + location.hostname + '\n\nOder "localhost" falls du lokal testest.');
+    } else {
+      alert('Login fehlgeschlagen: ' + e.message);
+    }
+  });
+};
 window.fbSignOut = () => signOut(auth);
 
 // ── Auth state → update UI & start/stop sync ──────────────
@@ -1049,15 +1061,15 @@ canvas#shareCardCanvas{border-radius:12px;max-width:100%;height:auto;display:blo
         <button class="theme-btn accent-btn" data-accent="green" onclick="setAccent('green')">🟢 Grün</button>
         <button class="theme-btn accent-btn" data-accent="blue" onclick="setAccent('blue')">🔵 Blau</button>
       </div>
-      <div class="accent-custom-wrap" id="accentCustomWrap">
-        <input type="color" id="accentCustomPicker" value="#a855f7" oninput="setCustomAccent(this.value)" style="width:28px;height:28px;border-radius:50%;border:2px solid var(--border2);cursor:pointer;padding:2px;background:none;">
+      <div class="accent-custom-wrap" id="accentCustomWrap" style="flex-wrap:wrap">
+        <input type="color" id="accentCustomPicker" value="#a855f7" oninput="setCustomAccent(this.value)" style="width:24px;height:24px;border-radius:50%;border:2px solid var(--border2);cursor:pointer;padding:2px;background:none;flex-shrink:0">
         <span style="font-size:11px;color:var(--tm)">✨ Eigene Farbe</span>
-        <button class="theme-btn accent-btn" data-accent="custom" id="accentCustomBtn" onclick="setAccent('custom')" style="font-size:10px;padding:4px 8px">Aktivieren</button>
+        <button class="theme-btn accent-btn" data-accent="custom" id="accentCustomBtn" onclick="setAccent('custom')" style="font-size:10px;padding:3px 7px">Aktivieren</button>
       </div>
     </div>
     <div class="settings-section" style="margin-top:14px">
       <div class="settings-section-title">Über</div>
-      <div style="font-size:12px;color:var(--tm);line-height:1.8;margin-bottom:10px">Version 0.9 · Gebaut mit ❤️</div>
+      <div style="font-size:12px;color:var(--tm);line-height:1.8;margin-bottom:10px" id="settingsVersion">Version 1.0</div>
       <button class="btn-secondary" id="newsBtn" style="width:100%;font-size:12px" onclick="document.getElementById('settingsModal').classList.remove('open');setTimeout(showChangelogForced,100)">📰 News & Changelog anzeigen</button>
     </div>
     <div class="form-actions"><button class="btn-primary" onclick="document.getElementById('settingsModal').classList.remove('open')">Fertig</button></div>
@@ -2622,7 +2634,9 @@ async function requestNotifPermission(){
   return perm === 'granted';
 }
 function checkNotifications(){
-  if(!('Notification' in window) || Notification.permission !== 'granted') return;
+  // In Electron, always fire — no permission needed for native notifications
+  const hasPermission = IS_ELECTRON || (('Notification' in window) && Notification.permission === 'granted');
+  if(!hasPermission) return;
   const today = ds(new Date());
   countdowns.forEach(cd=>{
     if(!cd.notify) return;
@@ -2635,11 +2649,12 @@ function checkNotifications(){
     if(localStorage.getItem(alreadyKey)) return;
     localStorage.setItem(alreadyKey, '1');
     const {count} = countDays(cd.date, cd.mode, cd.wdays, cd.exclude||[], cd.include||[], null);
-    new Notification(`${cd.emoji} ${cd.name}`, {
-      body: count === 0 ? 'Heute ist es so weit!' : `Noch ${count} Tag${count===1?'':'e'}`,
-      icon: APP_LOGO || undefined,
-      tag: cd.id
-    });
+    const body = count === 0 ? 'Heute ist es so weit!' : `Noch ${count} Tag${count===1?'':'e'}`;
+    if(IS_ELECTRON){
+      window.electronAPI.notify(`${cd.emoji} ${cd.name}`, body);
+    } else {
+      new Notification(`${cd.emoji} ${cd.name}`, { body, icon: APP_LOGO||undefined, tag: cd.id });
+    }
   });
 }
 
@@ -3652,7 +3667,47 @@ function copyEmbedCode(){
 // minute refresh
 setInterval(()=>{renderList();renderTrackerList();},60000);
 
-// ═══════════════ CHANGELOG ═══════════════
+// ═══════════════ ELECTRON INTEGRATION ═══════════════
+// When running in Electron, use native APIs instead of browser APIs
+const IS_ELECTRON = typeof window.electronAPI !== 'undefined';
+
+// Override notification to use native Electron notifications
+if(IS_ELECTRON){
+  window._nativeNotify = (title, body) => {
+    window.electronAPI.notify(title, body);
+  };
+}
+
+// Auto-updater UI
+if(IS_ELECTRON){
+  window.electronAPI.onUpdaterEvent((data) => {
+    if(data.event === 'downloaded'){
+      // Show update toast
+      showToast(`🆕 Update ${data.version} bereit — wird beim nächsten Start installiert`, null);
+      // Also show a more prominent banner after 2s
+      setTimeout(()=>{
+        const banner = document.createElement('div');
+        banner.id = 'updateBanner';
+        banner.style.cssText = `
+          position:fixed;bottom:70px;left:50%;transform:translateX(-50%);
+          background:var(--accent);color:#fff;padding:10px 20px;border-radius:10px;
+          font-size:13px;font-weight:600;z-index:800;display:flex;align-items:center;gap:12px;
+          box-shadow:0 4px 20px rgba(0,0,0,.4);white-space:nowrap;cursor:pointer;
+        `;
+        banner.innerHTML = `🆕 Update ${data.version} verfügbar <button style="background:rgba(255,255,255,.25);border:none;color:#fff;padding:4px 10px;border-radius:6px;font-weight:700;cursor:pointer;font-size:11px" onclick="window.electronAPI.installUpdate()">Jetzt installieren</button>`;
+        document.body.appendChild(banner);
+      }, 2000);
+    }
+  });
+
+  // Show app version in settings
+  window.electronAPI.getVersion().then(v => {
+    const verEl = document.querySelector('[style*="Version 0.9"]') ||
+      [...document.querySelectorAll('div')].find(d => d.textContent.trim().startsWith('Version'));
+    if(verEl) verEl.textContent = `Version ${v} · Desktop`;
+  });
+}
+
 function _versionGt(a, b){
   // Compare version strings like "0.9", "0.10", "1.0" numerically
   const pa = String(a).split('.').map(Number);
@@ -3671,8 +3726,13 @@ function checkChangelog(){
   window.fbCheckChangelog((data)=>{
     if(data && data.visible === false){ _updateNewsBtn(false); return; }
     if(!data || !data.version) return;
+    // Always update version display from Firebase
+    if(data.displayVersion){
+      const verEl = document.getElementById('settingsVersion');
+      if(verEl) verEl.textContent = `Version ${data.displayVersion}`;
+    }
     const seen = localStorage.getItem('cs4_changelog_seen') || '0';
-    if(!_versionGt(data.version, seen)) return; // already seen this version or older
+    if(!_versionGt(data.version, seen)) return;
     _showChangelogPopup(data);
   });
 }
@@ -3689,10 +3749,13 @@ function _updateNewsBtn(visible){
 }
 function _showChangelogPopup(data){
   document.getElementById('changelogTitle').textContent = data.title || 'Was ist neu';
-  // Rich text: \n = line break, **text** = bold, *text* = italic, \b = bold marker alt
   const raw = data.body || '';
   document.getElementById('changelogBody').innerHTML = _parseChangelogText(raw);
-  // Logo as newspaper masthead
+  // Update version in settings if displayVersion is provided
+  if(data.displayVersion){
+    const verEl = document.getElementById('settingsVersion');
+    if(verEl) verEl.textContent = `Version ${data.displayVersion}`;
+  }
   const logoWrap = document.getElementById('changelogLogo');
   if(APP_LOGO){
     const src = getLogoUrl();
