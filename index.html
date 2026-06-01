@@ -3373,19 +3373,23 @@ function _buildEmbedHTML(cd, opts){
     created: cd.created || null,
   });
 
+  // Watermark: hide for privileged account
+  const noWatermark = !!(window.fbUser && window.fbUser.email === 'echtesmensch@gmail.com');
+  const topLabel    = noWatermark ? '' : `<div style="font-size:9px;font-weight:600;letter-spacing:1.2px;color:${dimC};text-transform:uppercase;margin-bottom:10px">Countdown Studio</div>`;
+  const bottomUrl   = noWatermark ? '' : `<div style="font-size:9px;color:${dimC}">tinyurl.com/countdownstudio</div>`;
+
   return `<div id="cds-embed" style="font-family:'Plus Jakarta Sans',system-ui,sans-serif;width:${w};max-width:100%;box-sizing:border-box;border-radius:14px;overflow:hidden;position:relative;background:linear-gradient(135deg,${bgA},${bgB});border:1px solid ${borderC};padding:18px 20px 14px;display:flex;flex-direction:column;gap:0">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <div style="position:absolute;top:0;right:0;width:60%;height:100%;background:radial-gradient(ellipse at 80% 20%,${ac0}22,transparent 70%);pointer-events:none;border-radius:14px"></div>
-  <!-- App label -->
-  <div style="font-size:9px;font-weight:600;letter-spacing:1.2px;color:${dimC};text-transform:uppercase;margin-bottom:10px">Countdown Studio</div>
+  ${topLabel}
   <!-- Main row -->
   <div style="display:flex;align-items:flex-start;justify-content:space-between;flex:1">
     <!-- Left: emoji + name + date -->
     <div style="display:flex;flex-direction:column;gap:4px;max-width:58%">
-      <div id="cds-emoji" style="font-size:22px;line-height:1">${cd.emoji}</div>
-      <div id="cds-name" style="font-size:15px;font-weight:700;color:${textC};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${cd.name.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>
-      <div id="cds-date" style="font-size:10px;font-weight:500;color:${subC}">${new Date(cd.date+'T00:00:00').toLocaleDateString('de-DE',{day:'2-digit',month:'long',year:'numeric'})}</div>
+      <div style="font-size:22px;line-height:1">${cd.emoji}</div>
+      <div style="font-size:15px;font-weight:700;color:${textC};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${cd.name.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>
+      <div style="font-size:10px;font-weight:500;color:${subC}">${new Date(cd.date+'T00:00:00').toLocaleDateString('de-DE',{day:'2-digit',month:'long',year:'numeric'})}</div>
     </div>
     <!-- Right: big number -->
     <div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px">
@@ -3402,7 +3406,7 @@ function _buildEmbedHTML(cd, opts){
   <!-- Bottom row: mode + pct + url -->
   <div style="display:flex;justify-content:space-between;align-items:center">
     <div id="cds-mode" style="font-size:9px;font-weight:500;color:${dimC}">—</div>
-    <div style="font-size:9px;color:${dimC}">countdown.studio</div>
+    ${bottomUrl}
   </div>
   <script>
   (function(){
@@ -3418,44 +3422,44 @@ function _buildEmbedHTML(cd, opts){
       var labelEl=document.getElementById('cds-label');
       var barEl=document.getElementById('cds-bar');
       var modeEl=document.getElementById('cds-mode');
-      // Target ms: if allDay, midnight of target date; else use time field
-      var tgtMs = cd.allDay!==false
-        ? new Date(cd.date+'T00:00:00').getTime()
-        : new Date(cd.date+'T'+(cd.time||'00:00')+':00').getTime();
+      var tgtMs=cd.allDay!==false
+        ?new Date(cd.date+'T00:00:00').getTime()
+        :new Date(cd.date+'T'+(cd.time||'00:00')+':00').getTime();
       var nowMs=Date.now();
       var diffMs=tgtMs-nowMs;
-      var isLive=diffMs>0&&diffMs<86400000; // last 24h, future
+      var isLive=diffMs>0&&diffMs<86400000;
       var isPast=diffMs<=0;
-      // Progress bar (day-based, same logic as before)
-      var nowDay=new Date();nowDay.setHours(0,0,0,0);
+      // Progress: in live mode use ms-based pct for smooth bar; else day-based
       var tgtDay=new Date(cd.date+'T00:00:00');tgtDay.setHours(0,0,0,0);
       var sa;
       if(cd.start){sa=new Date(cd.start+'T00:00:00');sa.setHours(0,0,0,0);}
       else if(cd.created){sa=new Date(cd.created);sa.setHours(0,0,0,0);}
       else{sa=new Date(tgtDay);sa.setDate(sa.getDate()-30);}
-      var span=tgtDay-sa;
-      var pct=span<=0?(isPast?1:0):isPast?1:Math.min(1,Math.max(0,(nowDay-sa)/span));
-      if(barEl)barEl.style.width=Math.round(pct*100)+'%';
+      var pct;
       if(isLive){
-        // Switch to HH:MM:SS mode
+        // Use ms-based progress so bar actually moves every second
+        var saMs=sa.getTime(), spanMs=tgtMs-saMs;
+        pct=spanMs<=0?1:Math.min(1,Math.max(0,(nowMs-saMs)/spanMs));
+      } else {
+        var nowDay=new Date();nowDay.setHours(0,0,0,0);
+        var span=tgtDay-sa;
+        pct=span<=0?(isPast?1:0):isPast?1:Math.min(1,Math.max(0,(nowDay-sa)/span));
+      }
+      if(barEl)barEl.style.width=(pct*100).toFixed(4)+'%';
+      if(isLive){
         var totalSec=Math.ceil(diffMs/1000);
         var h=Math.floor(totalSec/3600),m=Math.floor((totalSec%3600)/60),s=totalSec%60;
         if(numEl){numEl.textContent=p2(h)+':'+p2(m)+':'+p2(s);numEl.style.fontSize='28px';numEl.style.letterSpacing='-0.5px';}
-        if(labelEl)labelEl.textContent='NOCH HEUTE';
-        if(modeEl)modeEl.textContent=fmtMode(cd.mode,cd.wdays)+' · fast da!';
-        // Start ticking every second if not already
+        if(labelEl)labelEl.textContent='NOCH';
+        if(modeEl)modeEl.textContent=fmtMode(cd.mode,cd.wdays)+' · '+Math.round(pct*100)+'%';
         if(!tickIv)tickIv=setInterval(update,1000);
       } else {
-        // Normal day mode
         if(tickIv){clearInterval(tickIv);tickIv=null;}
         var r=countDays();
         if(numEl){numEl.textContent=r.count;numEl.style.fontSize='46px';numEl.style.letterSpacing='';}
         if(labelEl)labelEl.textContent=r.isPast?'TAGE VERGANGEN':'TAGE NOCH';
         if(modeEl)modeEl.textContent=fmtMode(cd.mode,cd.wdays)+' · '+Math.round(pct*100)+'%';
-        // Schedule next daily refresh
-        var now2=new Date(),ms2=new Date(now2.getFullYear(),now2.getMonth(),now2.getDate()+1)-now2;
-        // But also check hourly if we might enter the 24h window soon
-        setTimeout(update, Math.min(ms2, 3600000));
+        setTimeout(update,Math.min(new Date(new Date().getFullYear(),new Date().getMonth(),new Date().getDate()+1)-Date.now(),3600000));
       }
     }
     update();
