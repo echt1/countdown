@@ -942,7 +942,7 @@ canvas#shareCardCanvas{border-radius:12px;max-width:100%;height:auto;display:blo
       </div>
 
       <!-- Gradient -->
-      <div style="margin-bottom:12px">
+      <div style="margin-bottom:10px">
         <label class="form-label" style="margin-bottom:4px">Hintergrund</label>
         <div style="display:flex;gap:5px">
           <button id="embedGrad0" class="theme-btn embed-grad-btn active" onclick="setEmbedGrad(0,this)" style="flex:1;font-size:10px;padding:5px 0">Warm</button>
@@ -950,6 +950,12 @@ canvas#shareCardCanvas{border-radius:12px;max-width:100%;height:auto;display:blo
           <button id="embedGrad2" class="theme-btn embed-grad-btn"        onclick="setEmbedGrad(2,this)" style="flex:1;font-size:10px;padding:5px 0">Blau</button>
           <button id="embedGrad3" class="theme-btn embed-grad-btn"        onclick="setEmbedGrad(3,this)" style="flex:1;font-size:10px;padding:5px 0">Neutral</button>
         </div>
+      </div>
+
+      <!-- Watermark toggle (only for privileged account) -->
+      <div class="toggle-row" id="embedWatermarkRow" style="margin-bottom:12px;display:none">
+        <span class="toggle-label">Wasserzeichen ausblenden</span>
+        <div class="toggle" id="embedWatermarkToggle" onclick="toggleEmbedWatermark()"><div class="toggle-thumb"></div></div>
       </div>
 
       <div class="share-code-box" id="embedCodeBox" onclick="selectEmbedCode()" style="font-size:10px;line-height:1.5;max-height:120px;overflow-y:auto"></div>
@@ -1607,6 +1613,9 @@ function openShareModal(id){
   }
   window._currentShareId = id;
   _embedInitDone = false; // reset so embed tab re-syncs theme/accent
+  // Show watermark toggle only for privileged account
+  const wmRow = document.getElementById('embedWatermarkRow');
+  if(wmRow) wmRow.style.display = (window.fbUser && window.fbUser.email === 'echtesmensch@gmail.com') ? 'flex' : 'none';
   document.getElementById('shareModal').classList.add('open');
 }
 
@@ -3304,6 +3313,7 @@ let embedSize = 'md';
 let embedTheme = 'dark';
 let embedAccent = 'red';
 let embedGrad = 0;
+let embedNoWatermark = false;
 
 function setEmbedSize(size, btn){
   embedSize = size;
@@ -3327,6 +3337,12 @@ function setEmbedGrad(g, btn){
   embedGrad = g;
   document.querySelectorAll('#sharePanelEmbed .embed-grad-btn').forEach(b=>b.classList.remove('active'));
   if(btn) btn.classList.add('active');
+  updateEmbedCode();
+}
+function toggleEmbedWatermark(){
+  embedNoWatermark = !embedNoWatermark;
+  const toggle = document.getElementById('embedWatermarkToggle');
+  if(toggle) toggle.style.background = embedNoWatermark ? 'var(--accent)' : 'var(--border2)';
   updateEmbedCode();
 }
 
@@ -3373,10 +3389,13 @@ function _buildEmbedHTML(cd, opts){
     created: cd.created || null,
   });
 
-  // Watermark: hide for privileged account
-  const noWatermark = !!(window.fbUser && window.fbUser.email === 'echtesmensch@gmail.com');
+  // Watermark controlled by toggle
+  const noWatermark = !!opts.noWatermark;
+  const topPad      = noWatermark ? '18px 20px 14px' : '18px 20px 14px';
   const topLabel    = noWatermark ? '' : `<div style="font-size:9px;font-weight:600;letter-spacing:1.2px;color:${dimC};text-transform:uppercase;margin-bottom:10px">Countdown Studio</div>`;
   const bottomUrl   = noWatermark ? '' : `<div style="font-size:9px;color:${dimC}">tinyurl.com/countdownstudio</div>`;
+  // Extra top margin on number when no watermark for better spacing
+  const numMarginTop = noWatermark ? 'margin-top:6px;' : '';
 
   return `<div id="cds-embed" style="font-family:'Plus Jakarta Sans',system-ui,sans-serif;width:${w};max-width:100%;box-sizing:border-box;border-radius:14px;overflow:hidden;position:relative;background:linear-gradient(135deg,${bgA},${bgB});border:1px solid ${borderC};padding:18px 20px 14px;display:flex;flex-direction:column;gap:0">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -3384,7 +3403,7 @@ function _buildEmbedHTML(cd, opts){
   <div style="position:absolute;top:0;right:0;width:60%;height:100%;background:radial-gradient(ellipse at 80% 20%,${ac0}22,transparent 70%);pointer-events:none;border-radius:14px"></div>
   ${topLabel}
   <!-- Main row -->
-  <div style="display:flex;align-items:flex-start;justify-content:space-between;flex:1">
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;flex:1;${numMarginTop}">
     <!-- Left: emoji + name + date -->
     <div style="display:flex;flex-direction:column;gap:4px;max-width:58%">
       <div style="font-size:22px;line-height:1">${cd.emoji}</div>
@@ -3429,18 +3448,17 @@ function _buildEmbedHTML(cd, opts){
       var diffMs=tgtMs-nowMs;
       var isLive=diffMs>0&&diffMs<86400000;
       var isPast=diffMs<=0;
-      // Progress: in live mode use ms-based pct for smooth bar; else day-based
-      var tgtDay=new Date(cd.date+'T00:00:00');tgtDay.setHours(0,0,0,0);
-      var sa;
-      if(cd.start){sa=new Date(cd.start+'T00:00:00');sa.setHours(0,0,0,0);}
-      else if(cd.created){sa=new Date(cd.created);sa.setHours(0,0,0,0);}
-      else{sa=new Date(tgtDay);sa.setDate(sa.getDate()-30);}
       var pct;
       if(isLive){
-        // Use ms-based progress so bar actually moves every second
-        var saMs=sa.getTime(), spanMs=tgtMs-saMs;
-        pct=spanMs<=0?1:Math.min(1,Math.max(0,(nowMs-saMs)/spanMs));
+        // Progress within the last-24h window: 0% at (tgt-24h), 100% at tgt
+        var windowStart=tgtMs-86400000;
+        pct=Math.min(1,Math.max(0,(nowMs-windowStart)/86400000));
       } else {
+        var tgtDay=new Date(cd.date+'T00:00:00');tgtDay.setHours(0,0,0,0);
+        var sa;
+        if(cd.start){sa=new Date(cd.start+'T00:00:00');sa.setHours(0,0,0,0);}
+        else if(cd.created){sa=new Date(cd.created);sa.setHours(0,0,0,0);}
+        else{sa=new Date(tgtDay);sa.setDate(sa.getDate()-30);}
         var nowDay=new Date();nowDay.setHours(0,0,0,0);
         var span=tgtDay-sa;
         pct=span<=0?(isPast?1:0):isPast?1:Math.min(1,Math.max(0,(nowDay-sa)/span));
@@ -3488,6 +3506,7 @@ function updateEmbedCode(){
     accent: embedAccent,
     grad: embedGrad,
     size: embedSize,
+    noWatermark: embedNoWatermark,
   });
   const box = document.getElementById('embedCodeBox');
   if(box) box.textContent = html;
