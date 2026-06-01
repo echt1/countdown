@@ -901,17 +901,59 @@ canvas#shareCardCanvas{border-radius:12px;max-width:100%;height:auto;display:blo
     </div>
     <!-- Embed panel -->
     <div class="share-panel" id="sharePanelEmbed">
-      <div class="modal-sub" style="margin-top:0">Bettet diesen Countdown als Widget auf jede Website ein.</div>
-      <div class="form-group">
-        <label class="form-label">Widget-Größe</label>
-        <div style="display:flex;gap:6px">
-          <button class="theme-btn" onclick="setEmbedSize('sm',this)" style="flex:1">Klein</button>
-          <button class="theme-btn active" onclick="setEmbedSize('md',this)" style="flex:1">Mittel</button>
-          <button class="theme-btn" onclick="setEmbedSize('lg',this)" style="flex:1">Groß</button>
+      <div class="modal-sub" style="margin-top:0">Bettet diesen Countdown als live-aktualisierendes Widget ein.</div>
+
+      <!-- Live Preview -->
+      <div style="margin-bottom:12px">
+        <label class="form-label">Vorschau</label>
+        <div id="embedPreviewWrap" style="border-radius:12px;overflow:hidden;display:flex;align-items:center;justify-content:center;padding:4px 0"></div>
+      </div>
+
+      <!-- Controls row -->
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+        <!-- Size -->
+        <div style="flex:1;min-width:80px">
+          <label class="form-label" style="margin-bottom:4px">Größe</label>
+          <div style="display:flex;gap:4px">
+            <button class="theme-btn size-btn" onclick="setEmbedSize('sm',this)" style="flex:1;font-size:10px;padding:5px 4px">S</button>
+            <button class="theme-btn size-btn active" onclick="setEmbedSize('md',this)" style="flex:1;font-size:10px;padding:5px 4px">M</button>
+            <button class="theme-btn size-btn" onclick="setEmbedSize('lg',this)" style="flex:1;font-size:10px;padding:5px 4px">L</button>
+          </div>
+        </div>
+        <!-- Theme -->
+        <div style="flex:1;min-width:100px">
+          <label class="form-label" style="margin-bottom:4px">Stil</label>
+          <div style="display:flex;gap:4px">
+            <button class="theme-btn theme-toggle-btn active" data-theme="dark" onclick="setEmbedTheme('dark',this)" style="flex:1;font-size:10px;padding:5px 4px">🌙 Dark</button>
+            <button class="theme-btn theme-toggle-btn" data-theme="light" onclick="setEmbedTheme('light',this)" style="flex:1;font-size:10px;padding:5px 4px">☀️ Light</button>
+          </div>
         </div>
       </div>
-      <div class="share-code-box" id="embedCodeBox" onclick="selectEmbedCode()" style="font-size:10px;line-height:1.5"></div>
-      <button class="copy-btn" id="embedCopyBtn" onclick="copyEmbedCode()">📋 Code kopieren</button>
+
+      <!-- Accent -->
+      <div style="margin-bottom:10px">
+        <label class="form-label" style="margin-bottom:4px">Farbe</label>
+        <div style="display:flex;gap:5px">
+          <button class="theme-btn embed-accent-btn active" data-accent="red"   onclick="setEmbedAccent('red',this)"   style="flex:1;font-size:10px;padding:5px 0;border-bottom:2px solid #c44a2a">Rot</button>
+          <button class="theme-btn embed-accent-btn"        data-accent="amber" onclick="setEmbedAccent('amber',this)" style="flex:1;font-size:10px;padding:5px 0;border-bottom:2px solid #c97d20">Amber</button>
+          <button class="theme-btn embed-accent-btn"        data-accent="green" onclick="setEmbedAccent('green',this)" style="flex:1;font-size:10px;padding:5px 0;border-bottom:2px solid #3a9e6a">Grün</button>
+          <button class="theme-btn embed-accent-btn"        data-accent="blue"  onclick="setEmbedAccent('blue',this)"  style="flex:1;font-size:10px;padding:5px 0;border-bottom:2px solid #2e6fd4">Blau</button>
+        </div>
+      </div>
+
+      <!-- Gradient -->
+      <div style="margin-bottom:12px">
+        <label class="form-label" style="margin-bottom:4px">Hintergrund</label>
+        <div style="display:flex;gap:5px">
+          <button id="embedGrad0" class="theme-btn embed-grad-btn active" onclick="setEmbedGrad(0,this)" style="flex:1;font-size:10px;padding:5px 0">Warm</button>
+          <button id="embedGrad1" class="theme-btn embed-grad-btn"        onclick="setEmbedGrad(1,this)" style="flex:1;font-size:10px;padding:5px 0">Amber</button>
+          <button id="embedGrad2" class="theme-btn embed-grad-btn"        onclick="setEmbedGrad(2,this)" style="flex:1;font-size:10px;padding:5px 0">Blau</button>
+          <button id="embedGrad3" class="theme-btn embed-grad-btn"        onclick="setEmbedGrad(3,this)" style="flex:1;font-size:10px;padding:5px 0">Neutral</button>
+        </div>
+      </div>
+
+      <div class="share-code-box" id="embedCodeBox" onclick="selectEmbedCode()" style="font-size:10px;line-height:1.5;max-height:120px;overflow-y:auto"></div>
+      <button class="copy-btn" id="embedCopyBtn" onclick="copyEmbedCode()">📋 HTML kopieren</button>
     </div>
     <!-- Online panel -->
     <div class="share-panel" id="sharePanelLive">
@@ -1281,11 +1323,7 @@ function generateEmbedCode(id){
   // Handle embed mode on load
 }
 function selectEmbedCode(){ const b=document.getElementById('embedCodeBox'); if(!b)return; const r=document.createRange(); r.selectNodeContents(b); const s=window.getSelection(); s.removeAllRanges(); s.addRange(r); }
-function copyEmbedCode(){
-  const code=document.getElementById('embedCodeBox').textContent;
-  if(navigator.clipboard) navigator.clipboard.writeText(code).then(()=>{});
-  else { const ta=document.createElement('textarea'); ta.value=code; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); }
-}
+
 // Check for embed param on load
 (function(){
   const params=new URLSearchParams(window.location.search);
@@ -1568,6 +1606,7 @@ function openShareModal(id){
     }
   }
   window._currentShareId = id;
+  _embedInitDone = false; // reset so embed tab re-syncs theme/accent
   document.getElementById('shareModal').classList.add('open');
 }
 
@@ -3262,31 +3301,172 @@ function downloadShareCard(){
 
 // ═══════════════ EMBED CODE ═══════════════
 let embedSize = 'md';
+let embedTheme = 'dark';
+let embedAccent = 'red';
+let embedGrad = 0;
+
 function setEmbedSize(size, btn){
   embedSize = size;
-  document.querySelectorAll('.share-panel .theme-btn').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('#sharePanelEmbed .size-btn').forEach(b=>b.classList.remove('active'));
+  if(btn) btn.classList.add('active');
+  updateEmbedCode();
+}
+function setEmbedTheme(theme, btn){
+  embedTheme = theme;
+  document.querySelectorAll('#sharePanelEmbed .theme-toggle-btn').forEach(b=>b.classList.remove('active'));
+  if(btn) btn.classList.add('active');
+  updateEmbedCode();
+}
+function setEmbedAccent(accent, btn){
+  embedAccent = accent;
+  document.querySelectorAll('#sharePanelEmbed .embed-accent-btn').forEach(b=>b.classList.remove('active'));
+  if(btn) btn.classList.add('active');
+  updateEmbedCode();
+}
+function setEmbedGrad(g, btn){
+  embedGrad = g;
+  document.querySelectorAll('#sharePanelEmbed .embed-grad-btn').forEach(b=>b.classList.remove('active'));
   if(btn) btn.classList.add('active');
   updateEmbedCode();
 }
 
+function _buildEmbedHTML(cd, opts){
+  // opts: { isLight, accent, grad, size }
+  const { isLight, accent, grad, size } = opts;
+  const sizes = { sm: '280px', md: '360px', lg: '480px' };
+  const w = sizes[size] || '360px';
+
+  const accentColors = {
+    red:   ['#c44a2a','#f0a882'],
+    amber: ['#c97d20','#f0b870'],
+    green: ['#3a9e6a','#80d4a8'],
+    blue:  ['#2e6fd4','#80b0f0'],
+  };
+  const [ac0, ac1] = accentColors[accent] || accentColors.red;
+
+  const bgPairs = [
+    isLight ? ['#f5f0ed','#e8ddd5'] : ['#120a08','#1f0e0a'],
+    isLight ? ['#fdf0e8','#f0ddd0'] : ['#130e06','#221408'],
+    isLight ? ['#eaf0f8','#d8e8f4'] : ['#080e14','#0c1620'],
+    isLight ? ['#f0f0f0','#e0e0e0'] : ['#0e0e0e','#1c1c1c'],
+  ];
+  const [bgA, bgB] = bgPairs[grad] || bgPairs[0];
+
+  const textC = isLight ? '#1a0f0a' : '#f5ede8';
+  const subC  = isLight ? '#8a7060' : '#9a6a5e';
+  const dimC  = isLight ? '#a09080' : '#5a3a32';
+  const barBg = isLight ? '#ddd4cc' : '#3a1a12';
+  const borderC = isLight ? 'rgba(255,255,255,0.55)' : 'rgba(255,255,255,0.08)';
+
+  // Sanitise values for inline JSON
+  const cdJson = JSON.stringify({
+    name: cd.name,
+    emoji: cd.emoji,
+    date: cd.date,
+    allDay: cd.allDay !== false,
+    time: cd.time || null,
+    mode: cd.mode || 'all',
+    wdays: cd.wdays || [1,2,3,4,5],
+    exclude: cd.exclude || [],
+    include: cd.include || [],
+    start: cd.start || null,
+    created: cd.created || null,
+  });
+
+  return `<div id="cds-embed" style="font-family:'Plus Jakarta Sans',system-ui,sans-serif;width:${w};max-width:100%;box-sizing:border-box;border-radius:14px;overflow:hidden;position:relative;background:linear-gradient(135deg,${bgA},${bgB});border:1px solid ${borderC};padding:18px 20px 14px;display:flex;flex-direction:column;gap:0">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <div style="position:absolute;top:0;right:0;width:60%;height:100%;background:radial-gradient(ellipse at 80% 20%,${ac0}22,transparent 70%);pointer-events:none;border-radius:14px"></div>
+  <!-- App label -->
+  <div style="font-size:9px;font-weight:600;letter-spacing:1.2px;color:${dimC};text-transform:uppercase;margin-bottom:10px">Countdown Studio</div>
+  <!-- Main row -->
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;flex:1">
+    <!-- Left: emoji + name + date -->
+    <div style="display:flex;flex-direction:column;gap:4px;max-width:58%">
+      <div id="cds-emoji" style="font-size:22px;line-height:1">${cd.emoji}</div>
+      <div id="cds-name" style="font-size:15px;font-weight:700;color:${textC};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${cd.name.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>
+      <div id="cds-date" style="font-size:10px;font-weight:500;color:${subC}">${new Date(cd.date+'T00:00:00').toLocaleDateString('de-DE',{day:'2-digit',month:'long',year:'numeric'})}</div>
+    </div>
+    <!-- Right: big number -->
+    <div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px">
+      <div id="cds-num" style="font-size:46px;font-weight:800;line-height:1;background:linear-gradient(135deg,${ac1},${ac0});-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">—</div>
+      <div id="cds-label" style="font-size:8px;font-weight:700;letter-spacing:.8px;color:${dimC};text-transform:uppercase">TAGE NOCH</div>
+    </div>
+  </div>
+  <!-- Progress bar -->
+  <div style="margin-top:12px;margin-bottom:6px">
+    <div style="width:100%;height:4px;background:${barBg};border-radius:2px;overflow:hidden">
+      <div id="cds-bar" style="height:100%;width:0%;background:linear-gradient(90deg,${ac0},${ac1});border-radius:2px;transition:width .6s ease"></div>
+    </div>
+  </div>
+  <!-- Bottom row: mode + pct + url -->
+  <div style="display:flex;justify-content:space-between;align-items:center">
+    <div id="cds-mode" style="font-size:9px;font-weight:500;color:${dimC}">—</div>
+    <div style="font-size:9px;color:${dimC}">countdown.studio</div>
+  </div>
+  <script>
+  (function(){
+    var cd=${cdJson};
+    function ds(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+    function dayOk(d,mode,wdays,excSet,incSet){var str=ds(d),wd=d.getDay();if(incSet.has(str))return true;if(excSet.has(str))return false;if(mode==='all')return true;if(mode==='workdays')return wd>=1&&wd<=5;if(mode==='weekends')return wd===0||wd===6;if(mode==='custom')return(wdays||[]).includes(wd);return true;}
+    function countDays(){var now=new Date();now.setHours(0,0,0,0);var tgt=new Date(cd.date+'T00:00:00');tgt.setHours(0,0,0,0);var excSet=new Set(cd.exclude||[]),incSet=new Set(cd.include||[]);var isPast=tgt<now;var from=isPast?tgt:now,to=isPast?now:tgt;var count=0,cur=new Date(from);cur.setDate(cur.getDate()+1);while(cur<=to){if(dayOk(cur,cd.mode,cd.wdays,excSet,incSet))count++;cur.setDate(cur.getDate()+1);}return{count:count,isPast:isPast};}
+    function fmtMode(mode,wdays){if(mode==='all')return'Alle Tage';if(mode==='workdays')return'Werktage';if(mode==='weekends')return'Wochenenden';if(mode==='custom'&&wdays){var n=['So','Mo','Di','Mi','Do','Fr','Sa'];return wdays.map(function(w){return n[w];}).join(', ');}return'';}
+    function update(){
+      var r=countDays();
+      var numEl=document.getElementById('cds-num');
+      var labelEl=document.getElementById('cds-label');
+      var barEl=document.getElementById('cds-bar');
+      var modeEl=document.getElementById('cds-mode');
+      if(numEl)numEl.textContent=r.count;
+      if(labelEl)labelEl.textContent=r.isPast?'TAGE VERGANGEN':'TAGE NOCH';
+      var now=new Date();now.setHours(0,0,0,0);
+      var tgt=new Date(cd.date+'T00:00:00');tgt.setHours(0,0,0,0);
+      var sa;
+      if(cd.start){sa=new Date(cd.start+'T00:00:00');sa.setHours(0,0,0,0);}
+      else if(cd.created){sa=new Date(cd.created);sa.setHours(0,0,0,0);}
+      else{sa=new Date(tgt);sa.setDate(sa.getDate()-30);}
+      var span=tgt-sa;
+      var pct=span<=0?(r.isPast?1:0):r.isPast?1:Math.min(1,Math.max(0,(now-sa)/span));
+      if(barEl)barEl.style.width=Math.round(pct*100)+'%';
+      if(modeEl)modeEl.textContent=fmtMode(cd.mode,cd.wdays)+' · '+Math.round(pct*100)+'%';
+    }
+    update();
+    // Refresh at midnight
+    var now=new Date(),ms=new Date(now.getFullYear(),now.getMonth(),now.getDate()+1)-now;
+    setTimeout(function(){update();setInterval(update,86400000);},ms);
+  })();
+  <\/script>
+</div>`;}
+
 function updateEmbedCode(){
   const cd = currentShareCd;
   if(!cd) return;
-  const code = encodeCD(cd);
-  const sizes = { sm:'280px', md:'360px', lg:'480px' };
-  const h     = { sm:'160px', md:'200px', lg:'260px' };
-  const w = sizes[embedSize];
-  const height = h[embedSize];
-  const src = window.location.href.split('?')[0];
-  const html = `<iframe
-  src="${src}?embed=${encodeURIComponent(code)}&size=${embedSize}"
-  width="${w}" height="${height}"
-  style="border:none;border-radius:12px;overflow:hidden"
-  title="${cd.name} Countdown">
-</iframe>`;
+
+  // Sync embed defaults to current app theme/accent on first open
+  if(!_embedInitDone){
+    embedTheme  = (settings.theme === 'light') ? 'light' : 'dark';
+    embedAccent = settings.accent || 'red';
+    embedGrad   = cardConfig.grad || 0;
+    _embedInitDone = true;
+    // Reflect in buttons
+    document.querySelectorAll('#sharePanelEmbed .theme-toggle-btn').forEach(b=>b.classList.toggle('active', b.dataset.theme===embedTheme));
+    document.querySelectorAll('#sharePanelEmbed .embed-accent-btn').forEach(b=>b.classList.toggle('active', b.dataset.accent===embedAccent));
+    const gb=document.getElementById('embedGrad'+embedGrad); if(gb) gb.classList.add('active');
+  }
+
+  const html = _buildEmbedHTML(cd, {
+    isLight: embedTheme === 'light',
+    accent: embedAccent,
+    grad: embedGrad,
+    size: embedSize,
+  });
   const box = document.getElementById('embedCodeBox');
   if(box) box.textContent = html;
+  // Live preview
+  const preview = document.getElementById('embedPreviewWrap');
+  if(preview){ preview.innerHTML = html; }
 }
+let _embedInitDone = false;
 
 function copyEmbedCode(){
   const code = document.getElementById('embedCodeBox').textContent;
@@ -3624,18 +3804,6 @@ function selectEmbedCode(){
   const box=document.getElementById('embedCodeBox');
   const range=document.createRange(); range.selectNodeContents(box);
   const sel=window.getSelection(); sel.removeAllRanges(); sel.addRange(range);
-}
-
-function copyEmbedCode(){
-  const code=document.getElementById('embedCodeBox').textContent;
-  const btn=document.getElementById('copyEmbedBtn');
-  if(navigator.clipboard&&navigator.clipboard.writeText){
-    navigator.clipboard.writeText(code).then(()=>{btn.textContent='✓ Kopiert!';setTimeout(()=>btn.textContent='📋 Embed-Code kopieren',2000);});
-  } else {
-    const ta=document.createElement('textarea');ta.value=code;document.body.appendChild(ta);ta.select();
-    document.execCommand('copy');document.body.removeChild(ta);
-    btn.textContent='✓ Kopiert!';setTimeout(()=>btn.textContent='📋 Embed-Code kopieren',2000);
-  }
 }
 
 // Embed mode: check URL param and render minimal widget
