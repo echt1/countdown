@@ -3407,33 +3407,58 @@ function _buildEmbedHTML(cd, opts){
   <script>
   (function(){
     var cd=${cdJson};
-    function ds(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+    var p2=function(n){return String(n).padStart(2,'0');};
+    function ds(d){return d.getFullYear()+'-'+p2(d.getMonth()+1)+'-'+p2(d.getDate());}
     function dayOk(d,mode,wdays,excSet,incSet){var str=ds(d),wd=d.getDay();if(incSet.has(str))return true;if(excSet.has(str))return false;if(mode==='all')return true;if(mode==='workdays')return wd>=1&&wd<=5;if(mode==='weekends')return wd===0||wd===6;if(mode==='custom')return(wdays||[]).includes(wd);return true;}
     function countDays(){var now=new Date();now.setHours(0,0,0,0);var tgt=new Date(cd.date+'T00:00:00');tgt.setHours(0,0,0,0);var excSet=new Set(cd.exclude||[]),incSet=new Set(cd.include||[]);var isPast=tgt<now;var from=isPast?tgt:now,to=isPast?now:tgt;var count=0,cur=new Date(from);cur.setDate(cur.getDate()+1);while(cur<=to){if(dayOk(cur,cd.mode,cd.wdays,excSet,incSet))count++;cur.setDate(cur.getDate()+1);}return{count:count,isPast:isPast};}
     function fmtMode(mode,wdays){if(mode==='all')return'Alle Tage';if(mode==='workdays')return'Werktage';if(mode==='weekends')return'Wochenenden';if(mode==='custom'&&wdays){var n=['So','Mo','Di','Mi','Do','Fr','Sa'];return wdays.map(function(w){return n[w];}).join(', ');}return'';}
+    var tickIv=null;
     function update(){
-      var r=countDays();
       var numEl=document.getElementById('cds-num');
       var labelEl=document.getElementById('cds-label');
       var barEl=document.getElementById('cds-bar');
       var modeEl=document.getElementById('cds-mode');
-      if(numEl)numEl.textContent=r.count;
-      if(labelEl)labelEl.textContent=r.isPast?'TAGE VERGANGEN':'TAGE NOCH';
-      var now=new Date();now.setHours(0,0,0,0);
-      var tgt=new Date(cd.date+'T00:00:00');tgt.setHours(0,0,0,0);
+      // Target ms: if allDay, midnight of target date; else use time field
+      var tgtMs = cd.allDay!==false
+        ? new Date(cd.date+'T00:00:00').getTime()
+        : new Date(cd.date+'T'+(cd.time||'00:00')+':00').getTime();
+      var nowMs=Date.now();
+      var diffMs=tgtMs-nowMs;
+      var isLive=diffMs>0&&diffMs<86400000; // last 24h, future
+      var isPast=diffMs<=0;
+      // Progress bar (day-based, same logic as before)
+      var nowDay=new Date();nowDay.setHours(0,0,0,0);
+      var tgtDay=new Date(cd.date+'T00:00:00');tgtDay.setHours(0,0,0,0);
       var sa;
       if(cd.start){sa=new Date(cd.start+'T00:00:00');sa.setHours(0,0,0,0);}
       else if(cd.created){sa=new Date(cd.created);sa.setHours(0,0,0,0);}
-      else{sa=new Date(tgt);sa.setDate(sa.getDate()-30);}
-      var span=tgt-sa;
-      var pct=span<=0?(r.isPast?1:0):r.isPast?1:Math.min(1,Math.max(0,(now-sa)/span));
+      else{sa=new Date(tgtDay);sa.setDate(sa.getDate()-30);}
+      var span=tgtDay-sa;
+      var pct=span<=0?(isPast?1:0):isPast?1:Math.min(1,Math.max(0,(nowDay-sa)/span));
       if(barEl)barEl.style.width=Math.round(pct*100)+'%';
-      if(modeEl)modeEl.textContent=fmtMode(cd.mode,cd.wdays)+' · '+Math.round(pct*100)+'%';
+      if(isLive){
+        // Switch to HH:MM:SS mode
+        var totalSec=Math.ceil(diffMs/1000);
+        var h=Math.floor(totalSec/3600),m=Math.floor((totalSec%3600)/60),s=totalSec%60;
+        if(numEl){numEl.textContent=p2(h)+':'+p2(m)+':'+p2(s);numEl.style.fontSize='28px';numEl.style.letterSpacing='-0.5px';}
+        if(labelEl)labelEl.textContent='NOCH HEUTE';
+        if(modeEl)modeEl.textContent=fmtMode(cd.mode,cd.wdays)+' · fast da!';
+        // Start ticking every second if not already
+        if(!tickIv)tickIv=setInterval(update,1000);
+      } else {
+        // Normal day mode
+        if(tickIv){clearInterval(tickIv);tickIv=null;}
+        var r=countDays();
+        if(numEl){numEl.textContent=r.count;numEl.style.fontSize='46px';numEl.style.letterSpacing='';}
+        if(labelEl)labelEl.textContent=r.isPast?'TAGE VERGANGEN':'TAGE NOCH';
+        if(modeEl)modeEl.textContent=fmtMode(cd.mode,cd.wdays)+' · '+Math.round(pct*100)+'%';
+        // Schedule next daily refresh
+        var now2=new Date(),ms2=new Date(now2.getFullYear(),now2.getMonth(),now2.getDate()+1)-now2;
+        // But also check hourly if we might enter the 24h window soon
+        setTimeout(update, Math.min(ms2, 3600000));
+      }
     }
     update();
-    // Refresh at midnight
-    var now=new Date(),ms=new Date(now.getFullYear(),now.getMonth(),now.getDate()+1)-now;
-    setTimeout(function(){update();setInterval(update,86400000);},ms);
   })();
   <\/script>
 </div>`;}
